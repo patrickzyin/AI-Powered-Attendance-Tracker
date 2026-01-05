@@ -221,29 +221,22 @@ class AttendanceSystem:
             if not persons:
                 return [], "No enrolled persons in your organization"
             
-            detected_faces = None
-            backend_used = None
-            backends = ['retinaface', 'mtcnn', 'opencv', 'ssd']
+            # Use only OpenCV detector (fastest)
+            try:
+                detected_faces = DeepFace.extract_faces(
+                    img_path=image_path,
+                    detector_backend='opencv',
+                    enforce_detection=False,
+                    align=False
+                )
+            except Exception as e:
+                return [], f"Face detection failed: {str(e)}"
             
-            for backend in backends:
-                try:
-                    detected_faces = DeepFace.extract_faces(
-                        img_path=image_path,
-                        detector_backend=backend,
-                        enforce_detection=False,
-                        align=False
-                    )
-                    if detected_faces and len(detected_faces) > 0:
-                        backend_used = backend
-                        break
-                except Exception as e:
-                    continue
-            
-            if detected_faces is None or len(detected_faces) == 0:
+            if not detected_faces or len(detected_faces) == 0:
                 return [], "No faces detected in image"
             
             recognized_persons = []
-            debug_info = [f"Detector: {backend_used} | Faces found: {len(detected_faces)}\n"]
+            debug_info = [f"Detector: opencv | Faces found: {len(detected_faces)}\n"]
             
             for face_idx, detected_face in enumerate(detected_faces):
                 debug_info.append(f"--- Face {face_idx+1} ---")

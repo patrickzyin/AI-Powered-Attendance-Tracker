@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Face Recognition Attendance System</title>
+    <title>Dashboard - AI Attendance Tracker</title>
     <style>
         * {
             margin: 0;
@@ -11,64 +11,120 @@
             box-sizing: border-box;
         }
         
+        :root {
+            --bg-color: #e0e5ec;
+            --primary: #667eea;
+            --secondary: #764ba2;
+            --text-dark: #2c3e50;
+            --text-light: #7f8c8d;
+            --shadow-light: #ffffff;
+            --shadow-dark: #a3b1c6;
+            --success: #2ecc71;
+            --error: #e74c3c;
+            --warning: #f39c12;
+        }
+        
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            padding: 20px;
+            background: var(--bg-color);
+            color: var(--text-dark);
+        }
+        
+        /* Navbar */
+        nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 40px;
+            background: var(--bg-color);
+            box-shadow: 5px 5px 15px var(--shadow-dark), 
+                        -5px -5px 15px var(--shadow-light);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        
+        .logo {
+            font-size: 24px;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+        
+        .user-name {
+            font-weight: 600;
+            color: var(--text-dark);
+        }
+        
+        .neu-btn {
+            padding: 10px 25px;
+            border: none;
+            border-radius: 50px;
+            background: var(--bg-color);
+            box-shadow: 5px 5px 10px var(--shadow-dark), 
+                        -5px -5px 10px var(--shadow-light);
+            cursor: pointer;
+            font-weight: 600;
+            color: var(--text-dark);
+            transition: all 0.3s;
+            font-size: 14px;
+        }
+        
+        .neu-btn:hover {
+            box-shadow: 2px 2px 5px var(--shadow-dark), 
+                        -2px -2px 5px var(--shadow-light);
+        }
+        
+        .neu-btn.primary {
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: white;
+            box-shadow: 5px 5px 10px rgba(102, 126, 234, 0.3);
         }
         
         .container {
-            max-width: 1200px;
+            max-width: 1400px;
             margin: 0 auto;
-            background: white;
-            border-radius: 20px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-            overflow: hidden;
-        }
-        
-        header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
             padding: 30px;
-            text-align: center;
         }
         
-        h1 {
-            font-size: 2.5em;
-            margin-bottom: 10px;
-        }
-        
+        /* Tabs */
         .tabs {
             display: flex;
-            background: #f5f5f5;
-            border-bottom: 2px solid #ddd;
+            gap: 15px;
+            margin-bottom: 40px;
+            background: var(--bg-color);
+            border-radius: 20px;
+            padding: 10px;
+            box-shadow: inset 5px 5px 10px var(--shadow-dark), 
+                        inset -5px -5px 10px var(--shadow-light);
         }
         
         .tab {
             flex: 1;
-            padding: 20px;
+            padding: 15px;
             text-align: center;
             cursor: pointer;
-            background: #f5f5f5;
-            border: none;
-            font-size: 16px;
             font-weight: 600;
+            color: var(--text-light);
+            border-radius: 15px;
             transition: all 0.3s;
         }
         
-        .tab:hover {
-            background: #e0e0e0;
-        }
-        
         .tab.active {
-            background: white;
-            border-bottom: 3px solid #667eea;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: white;
+            box-shadow: 5px 5px 10px rgba(102, 126, 234, 0.3);
         }
         
         .tab-content {
             display: none;
-            padding: 40px;
             animation: fadeIn 0.3s;
         }
         
@@ -81,169 +137,182 @@
             to { opacity: 1; transform: translateY(0); }
         }
         
+        /* Cards */
+        .neu-card {
+            background: var(--bg-color);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 10px 10px 30px var(--shadow-dark), 
+                        -10px -10px 30px var(--shadow-light);
+            margin-bottom: 30px;
+        }
+        
+        .card-title {
+            font-size: 24px;
+            margin-bottom: 20px;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        /* Form Elements */
         .form-group {
-            margin-bottom: 25px;
+            margin-bottom: 20px;
         }
         
         label {
             display: block;
             margin-bottom: 8px;
             font-weight: 600;
-            color: #333;
+            color: var(--text-dark);
+            font-size: 14px;
         }
         
         input[type="text"], input[type="date"] {
             width: 100%;
-            padding: 12px;
-            border: 2px solid #ddd;
-            border-radius: 8px;
-            font-size: 16px;
-            transition: border 0.3s;
+            padding: 14px 18px;
+            border: none;
+            border-radius: 12px;
+            background: var(--bg-color);
+            box-shadow: inset 4px 4px 8px var(--shadow-dark), 
+                        inset -4px -4px 8px var(--shadow-light);
+            font-size: 15px;
+            color: var(--text-dark);
         }
         
         input:focus {
             outline: none;
-            border-color: #667eea;
         }
         
-        .btn {
-            padding: 12px 30px;
+        .button-group {
+            display: flex;
+            gap: 15px;
+            margin: 20px 0;
+        }
+        
+        .neu-btn-large {
+            padding: 14px 30px;
             border: none;
-            border-radius: 8px;
-            font-size: 16px;
+            border-radius: 15px;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: white;
             font-weight: 600;
             cursor: pointer;
+            box-shadow: 6px 6px 12px rgba(102, 126, 234, 0.3);
             transition: all 0.3s;
-            margin: 5px;
+            font-size: 15px;
         }
         
-        .btn-primary {
-            background: #667eea;
-            color: white;
-        }
-        
-        .btn-primary:hover {
-            background: #5568d3;
+        .neu-btn-large:hover {
             transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+            box-shadow: 8px 8px 16px rgba(102, 126, 234, 0.4);
         }
         
-        .btn-secondary {
-            background: #6c757d;
-            color: white;
+        .neu-btn-secondary {
+            background: var(--bg-color);
+            color: var(--text-dark);
+            box-shadow: 6px 6px 12px var(--shadow-dark), 
+                        -6px -6px 12px var(--shadow-light);
         }
         
-        .btn-secondary:hover {
-            background: #5a6268;
-        }
-        
-        .btn-danger {
-            background: #dc3545;
-            color: white;
-        }
-        
-        .btn-danger:hover {
-            background: #c82333;
-        }
-        
+        /* Video/Preview */
         .video-container {
-            position: relative;
             margin: 20px 0;
             text-align: center;
-        }
-        
-        #video, #attendanceVideo {
-            width: 100%;
-            max-width: 640px;
-            border-radius: 12px;
-            box-shadow: 0 5px 20px rgba(0,0,0,0.2);
-        }
-        
-        #canvas {
             display: none;
         }
         
-        .preview-container {
-            margin: 20px 0;
-            text-align: center;
+        video {
+            width: 100%;
+            max-width: 640px;
+            border-radius: 15px;
+            box-shadow: 10px 10px 30px var(--shadow-dark);
         }
         
         .preview-img {
-            max-width: 300px;
-            border-radius: 12px;
-            box-shadow: 0 5px 20px rgba(0,0,0,0.2);
+            max-width: 100%;
+            max-height: 400px;
+            border-radius: 15px;
+            box-shadow: 10px 10px 30px var(--shadow-dark);
+            margin: 20px 0;
         }
         
+        /* Status Box */
         .status-box {
-            margin: 20px 0;
+            background: var(--bg-color);
+            border-radius: 15px;
             padding: 20px;
-            border-radius: 12px;
-            background: #f8f9fa;
-            white-space: pre-wrap;
+            margin: 20px 0;
+            box-shadow: inset 4px 4px 8px var(--shadow-dark), 
+                        inset -4px -4px 8px var(--shadow-light);
             font-family: 'Courier New', monospace;
             font-size: 14px;
+            white-space: pre-wrap;
             max-height: 400px;
             overflow-y: auto;
+            line-height: 1.6;
         }
         
-        .success {
-            color: #28a745;
-            font-weight: 600;
-        }
+        .success { color: var(--success); font-weight: 600; }
+        .error { color: var(--error); font-weight: 600; }
+        .warning { color: var(--warning); font-weight: 600; }
         
-        .error {
-            color: #dc3545;
-            font-weight: 600;
-        }
-        
-        .warning {
-            color: #ffc107;
-            font-weight: 600;
-        }
-        
+        /* Table */
         table {
             width: 100%;
             border-collapse: collapse;
             margin: 20px 0;
         }
         
-        th, td {
+        th {
             padding: 15px;
             text-align: left;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: white;
+            font-weight: 600;
+            border-radius: 10px 10px 0 0;
+        }
+        
+        th:first-child {
+            border-radius: 10px 0 0 0;
+        }
+        
+        th:last-child {
+            border-radius: 0 10px 0 0;
+        }
+        
+        td {
+            padding: 15px;
             border-bottom: 1px solid #ddd;
         }
         
-        th {
-            background: #667eea;
-            color: white;
-            font-weight: 600;
-        }
-        
         tr:hover {
-            background: #f5f5f5;
+            background: rgba(102, 126, 234, 0.05);
         }
         
-        .button-group {
-            display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
-            margin: 20px 0;
+        .table-container {
+            background: var(--bg-color);
+            border-radius: 15px;
+            box-shadow: 10px 10px 30px var(--shadow-dark), 
+                        -10px -10px 30px var(--shadow-light);
+            overflow: hidden;
         }
         
+        /* Loading */
         .loading {
             display: none;
             text-align: center;
-            padding: 20px;
+            padding: 30px;
         }
         
         .spinner {
-            border: 4px solid #f3f3f3;
-            border-top: 4px solid #667eea;
+            width: 50px;
+            height: 50px;
+            margin: 0 auto 15px;
+            border: 5px solid var(--bg-color);
+            border-top: 5px solid var(--primary);
             border-radius: 50%;
-            width: 40px;
-            height: 40px;
             animation: spin 1s linear infinite;
-            margin: 0 auto;
         }
         
         @keyframes spin {
@@ -252,155 +321,181 @@
         }
         
         .alert {
-            padding: 15px;
-            border-radius: 8px;
+            padding: 15px 20px;
+            border-radius: 12px;
             margin: 15px 0;
+            font-weight: 500;
         }
         
         .alert-success {
-            background: #d4edda;
-            color: #155724;
-            border: 1px solid #c3e6cb;
+            background: rgba(46, 204, 113, 0.1);
+            color: var(--success);
+            border: 2px solid rgba(46, 204, 113, 0.3);
         }
         
         .alert-error {
-            background: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
+            background: rgba(231, 76, 60, 0.1);
+            color: var(--error);
+            border: 2px solid rgba(231, 76, 60, 0.3);
+        }
+        
+        canvas { display: none; }
+        
+        @media (max-width: 768px) {
+            .tabs {
+                flex-direction: column;
+            }
+            
+            .button-group {
+                flex-direction: column;
+            }
         }
     </style>
 </head>
 <body>
+    <nav>
+        <div class="logo">🎭 AI Attendance Tracker</div>
+        <div class="user-info">
+            <span class="user-name" id="username">Loading...</span>
+            <button class="neu-btn" onclick="logout()">Logout</button>
+        </div>
+    </nav>
+    
     <div class="container">
-        <header>
-            <h1>🎭 Face Recognition Attendance</h1>
-            <p>Smart attendance tracking with AI-powered face recognition</p>
-        </header>
-        
         <div class="tabs">
-            <button class="tab active" onclick="showTab('enroll')">📝 Register</button>
-            <button class="tab" onclick="showTab('attendance')">✅ Attendance</button>
-            <button class="tab" onclick="showTab('reports')">📊 Reports</button>
-            <button class="tab" onclick="showTab('people')">👥 People</button>
+            <div class="tab active" onclick="showTab('enroll')">📝 Register</div>
+            <div class="tab" onclick="showTab('attendance')">✅ Attendance</div>
+            <div class="tab" onclick="showTab('reports')">📊 Reports</div>
+            <div class="tab" onclick="showTab('people')">👥 People</div>
         </div>
         
         <!-- Register Tab -->
         <div id="enroll" class="tab-content active">
-            <h2>Register New Person</h2>
-            
-            <div class="form-group">
-                <label for="personName">Name:</label>
-                <input type="text" id="personName" placeholder="Enter full name">
-            </div>
-            
-            <div class="button-group">
-                <button class="btn btn-primary" onclick="startEnrollCamera()">📷 Use Webcam</button>
-                <button class="btn btn-secondary" onclick="document.getElementById('enrollFile').click()">📁 Upload Photo</button>
-                <input type="file" id="enrollFile" accept="image/*" style="display:none" onchange="handleFileUpload(this, 'enroll')">
-            </div>
-            
-            <div class="video-container" id="enrollVideoContainer" style="display:none;">
-                <video id="video" autoplay></video>
-                <div style="margin-top: 15px;">
-                    <button class="btn btn-primary" onclick="captureEnrollPhoto()">📸 Capture</button>
-                    <button class="btn btn-secondary" onclick="stopEnrollCamera()">❌ Cancel</button>
+            <div class="neu-card">
+                <h2 class="card-title">Register New Person</h2>
+                
+                <div class="form-group">
+                    <label for="personName">Name</label>
+                    <input type="text" id="personName" placeholder="Enter full name">
                 </div>
+                
+                <div class="button-group">
+                    <button class="neu-btn-large" onclick="startEnrollCamera()">📷 Use Webcam</button>
+                    <button class="neu-btn-large neu-btn-secondary" onclick="document.getElementById('enrollFile').click()">📁 Upload Photo</button>
+                    <input type="file" id="enrollFile" accept="image/*" style="display:none" onchange="handleFileUpload(this, 'enroll')">
+                </div>
+                
+                <div class="video-container" id="enrollVideoContainer">
+                    <video id="video" autoplay></video>
+                    <div class="button-group" style="margin-top: 15px;">
+                        <button class="neu-btn-large" onclick="captureEnrollPhoto()">📸 Capture</button>
+                        <button class="neu-btn-large neu-btn-secondary" onclick="stopEnrollCamera()">❌ Cancel</button>
+                    </div>
+                </div>
+                
+                <div id="enrollPreview"></div>
+                
+                <button class="neu-btn-large" onclick="enrollPerson()" style="width: 100%; margin-top: 20px;">✓ Register Person</button>
+                
+                <div class="loading" id="enrollLoading">
+                    <div class="spinner"></div>
+                    <p>Processing...</p>
+                </div>
+                
+                <div id="enrollStatus"></div>
             </div>
-            
-            <div class="preview-container" id="enrollPreview"></div>
-            
-            <button class="btn btn-primary" onclick="enrollPerson()" style="width: 100%; margin-top: 20px;">✓ Register Person</button>
-            
-            <div class="loading" id="enrollLoading">
-                <div class="spinner"></div>
-                <p>Processing...</p>
-            </div>
-            
-            <div id="enrollStatus"></div>
         </div>
         
         <!-- Attendance Tab -->
         <div id="attendance" class="tab-content">
-            <h2>Mark Attendance</h2>
-            
-            <div class="button-group">
-                <button class="btn btn-primary" onclick="startAttendanceCamera()">📷 Use Webcam</button>
-                <button class="btn btn-secondary" onclick="document.getElementById('attendanceFile').click()">📁 Upload Photo</button>
-                <input type="file" id="attendanceFile" accept="image/*" style="display:none" onchange="handleFileUpload(this, 'attendance')">
-            </div>
-            
-            <div class="video-container" id="attendanceVideoContainer" style="display:none;">
-                <video id="attendanceVideo" autoplay></video>
-                <div style="margin-top: 15px;">
-                    <button class="btn btn-primary" onclick="captureAttendancePhoto()">📸 Capture & Recognize</button>
-                    <button class="btn btn-secondary" onclick="stopAttendanceCamera()">❌ Cancel</button>
+            <div class="neu-card">
+                <h2 class="card-title">Mark Attendance</h2>
+                
+                <div class="button-group">
+                    <button class="neu-btn-large" onclick="startAttendanceCamera()">📷 Use Webcam</button>
+                    <button class="neu-btn-large neu-btn-secondary" onclick="document.getElementById('attendanceFile').click()">📁 Upload Photo</button>
+                    <input type="file" id="attendanceFile" accept="image/*" style="display:none" onchange="handleFileUpload(this, 'attendance')">
                 </div>
+                
+                <div class="video-container" id="attendanceVideoContainer">
+                    <video id="attendanceVideo" autoplay></video>
+                    <div class="button-group" style="margin-top: 15px;">
+                        <button class="neu-btn-large" onclick="captureAttendancePhoto()">📸 Capture & Recognize</button>
+                        <button class="neu-btn-large neu-btn-secondary" onclick="stopAttendanceCamera()">❌ Cancel</button>
+                    </div>
+                </div>
+                
+                <div id="attendancePreview"></div>
+                
+                <div class="loading" id="attendanceLoading">
+                    <div class="spinner"></div>
+                    <p>Recognizing faces... This may take 10-15 seconds</p>
+                </div>
+                
+                <div class="status-box" id="attendanceStatus"></div>
             </div>
-            
-            <div class="preview-container" id="attendancePreview"></div>
-            
-            <div class="loading" id="attendanceLoading">
-                <div class="spinner"></div>
-                <p>Recognizing faces...</p>
-            </div>
-            
-            <div class="status-box" id="attendanceStatus"></div>
         </div>
         
         <!-- Reports Tab -->
         <div id="reports" class="tab-content">
-            <h2>Attendance Reports</h2>
-            
-            <div style="display: flex; gap: 15px; flex-wrap: wrap; margin: 20px 0;">
-                <div class="form-group" style="flex: 1; min-width: 200px;">
-                    <label>Start Date:</label>
-                    <input type="date" id="startDate">
+            <div class="neu-card">
+                <h2 class="card-title">Attendance Reports</h2>
+                
+                <div style="display: flex; gap: 15px; margin-bottom: 20px;">
+                    <div class="form-group" style="flex: 1;">
+                        <label>Start Date</label>
+                        <input type="date" id="startDate">
+                    </div>
+                    <div class="form-group" style="flex: 1;">
+                        <label>End Date</label>
+                        <input type="date" id="endDate">
+                    </div>
                 </div>
-                <div class="form-group" style="flex: 1; min-width: 200px;">
-                    <label>End Date:</label>
-                    <input type="date" id="endDate">
+                
+                <div class="button-group">
+                    <button class="neu-btn-large" onclick="loadReports()">🔍 Filter</button>
+                    <button class="neu-btn-large neu-btn-secondary" onclick="showAllReports()">📋 Show All</button>
+                    <button class="neu-btn-large neu-btn-secondary" onclick="exportCSV()">📥 Export CSV</button>
                 </div>
-            </div>
-            
-            <div class="button-group">
-                <button class="btn btn-primary" onclick="loadReports()">🔍 Filter</button>
-                <button class="btn btn-secondary" onclick="showAllReports()">📋 Show All</button>
-                <button class="btn btn-secondary" onclick="exportCSV()">📥 Export CSV</button>
-            </div>
-            
-            <div style="overflow-x: auto;">
-                <table id="reportsTable">
-                    <thead>
-                        <tr>
-                            <th>Name</th>
-                            <th>Date</th>
-                            <th>Time</th>
-                        </tr>
-                    </thead>
-                    <tbody id="reportsBody">
-                    </tbody>
-                </table>
+                
+                <div class="table-container">
+                    <table id="reportsTable">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Date</th>
+                                <th>Time</th>
+                            </tr>
+                        </thead>
+                        <tbody id="reportsBody">
+                            <tr><td colspan="3" style="text-align: center;">Loading...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
         
         <!-- People Tab -->
         <div id="people" class="tab-content">
-            <h2>Registered People</h2>
-            
-            <button class="btn btn-secondary" onclick="loadPeople()" style="margin: 15px 0;">🔄 Refresh</button>
-            
-            <div style="overflow-x: auto;">
-                <table id="peopleTable">
-                    <thead>
-                        <tr>
-                            <th>Name</th>
-                            <th>Enrollment Date</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody id="peopleBody">
-                    </tbody>
-                </table>
+            <div class="neu-card">
+                <h2 class="card-title">Registered People</h2>
+                
+                <button class="neu-btn-large neu-btn-secondary" onclick="loadPeople()" style="margin-bottom: 20px;">🔄 Refresh</button>
+                
+                <div class="table-container">
+                    <table id="peopleTable">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Enrollment Date</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="peopleBody">
+                            <tr><td colspan="3" style="text-align: center;">Loading...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </div>
@@ -413,7 +508,30 @@
         let enrollCapturedImage = null;
         let attendanceCapturedImage = null;
         
-        // Tab switching
+        // Load user info
+        async function loadUserInfo() {
+            try {
+                const response = await fetch('/api/user');
+                if (response.status === 401) {
+                    window.location.href = '/login';
+                    return;
+                }
+                const data = await response.json();
+                document.getElementById('username').textContent = data.username || 'User';
+            } catch (err) {
+                console.error('Failed to load user info');
+            }
+        }
+        
+        async function logout() {
+            try {
+                await fetch('/api/logout', { method: 'POST' });
+                window.location.href = '/';
+            } catch (err) {
+                console.error('Logout failed');
+            }
+        }
+        
         function showTab(tabName) {
             document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
             document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
@@ -421,7 +539,6 @@
             event.target.classList.add('active');
             document.getElementById(tabName).classList.add('active');
             
-            // Load data when switching to certain tabs
             if (tabName === 'reports') showAllReports();
             if (tabName === 'people') loadPeople();
         }
@@ -450,7 +567,6 @@
             const video = document.getElementById('video');
             const canvas = document.getElementById('canvas');
             
-            // Resize to max 1200px width for better quality
             const maxWidth = 1200;
             const scale = Math.min(1, maxWidth / video.videoWidth);
             canvas.width = video.videoWidth * scale;
@@ -459,7 +575,6 @@
             const ctx = canvas.getContext('2d');
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
             
-            // Higher quality compression
             enrollCapturedImage = canvas.toDataURL('image/jpeg', 0.85);
             
             document.getElementById('enrollPreview').innerHTML = 
@@ -470,47 +585,43 @@
         
         function handleFileUpload(input, type) {
             const file = input.files[0];
-            if (file) {
-                // Allow up to 20MB before compression
-                if (file.size > 20 * 1024 * 1024) {
-                    alert('File too large. Please use an image under 20MB');
-                    return;
-                }
-                
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    // Compress the uploaded image
-                    const img = new Image();
-                    img.onload = function() {
-                        const canvas = document.getElementById('canvas');
-                        
-                        // Resize to max 1600px width (higher quality for group photos)
-                        const maxWidth = 1600;
-                        const scale = Math.min(1, maxWidth / img.width);
-                        canvas.width = img.width * scale;
-                        canvas.height = img.height * scale;
-                        
-                        const ctx = canvas.getContext('2d');
-                        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                        
-                        // Higher quality compression (0.85 instead of 0.7)
-                        const compressedImage = canvas.toDataURL('image/jpeg', 0.85);
-                        
-                        if (type === 'enroll') {
-                            enrollCapturedImage = compressedImage;
-                            document.getElementById('enrollPreview').innerHTML = 
-                                `<img src="${compressedImage}" class="preview-img" alt="Uploaded">`;
-                        } else {
-                            attendanceCapturedImage = compressedImage;
-                            document.getElementById('attendancePreview').innerHTML = 
-                                `<img src="${compressedImage}" class="preview-img" alt="Uploaded">`;
-                            markAttendance();
-                        }
-                    };
-                    img.src = e.target.result;
-                };
-                reader.readAsDataURL(file);
+            if (!file) return;
+            
+            if (file.size > 20 * 1024 * 1024) {
+                alert('File too large. Please use an image under 20MB');
+                return;
             }
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const img = new Image();
+                img.onload = function() {
+                    const canvas = document.getElementById('canvas');
+                    
+                    const maxWidth = 1600;
+                    const scale = Math.min(1, maxWidth / img.width);
+                    canvas.width = img.width * scale;
+                    canvas.height = img.height * scale;
+                    
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                    
+                    const compressedImage = canvas.toDataURL('image/jpeg', 0.85);
+                    
+                    if (type === 'enroll') {
+                        enrollCapturedImage = compressedImage;
+                        document.getElementById('enrollPreview').innerHTML = 
+                            `<img src="${compressedImage}" class="preview-img" alt="Uploaded">`;
+                    } else {
+                        attendanceCapturedImage = compressedImage;
+                        document.getElementById('attendancePreview').innerHTML = 
+                            `<img src="${compressedImage}" class="preview-img" alt="Uploaded">`;
+                        markAttendance();
+                    }
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
         }
         
         async function enrollPerson() {
@@ -585,7 +696,6 @@
             const video = document.getElementById('attendanceVideo');
             const canvas = document.getElementById('canvas');
             
-            // Resize to max 1600px width for group photos
             const maxWidth = 1600;
             const scale = Math.min(1, maxWidth / video.videoWidth);
             canvas.width = video.videoWidth * scale;
@@ -594,7 +704,6 @@
             const ctx = canvas.getContext('2d');
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
             
-            // Higher quality for group photos
             attendanceCapturedImage = canvas.toDataURL('image/jpeg', 0.85);
             
             stopAttendanceCamera();
@@ -625,7 +734,7 @@
                 
                 let statusHTML = '<strong>=== DETECTION & RECOGNITION DETAILS ===</strong>\n\n';
                 statusHTML += data.debug + '\n\n';
-                statusHTML += '=' . repeat(50) + '\n\n';
+                statusHTML += '=' + '='.repeat(49) + '\n\n';
                 
                 if (data.success) {
                     statusHTML += '<span class="success">✅ RECOGNITION COMPLETE</span>\n\n';
@@ -650,7 +759,7 @@
                         });
                     }
                 } else {
-                    statusHTML += '<span class="error">❌ No recognized faces</span>';
+                    statusHTML += `<span class="error">❌ ${data.message}</span>`;
                 }
                 
                 document.getElementById('attendanceStatus').innerHTML = statusHTML;
@@ -662,7 +771,7 @@
                 
                 let errorMsg = err.message;
                 if (errorMsg.includes('413') || errorMsg.includes('Entity Too Large')) {
-                    errorMsg = 'Image too large. Please use a smaller photo or lower resolution camera.';
+                    errorMsg = 'Image too large. Please use a smaller photo.';
                 }
                 
                 document.getElementById('attendanceStatus').innerHTML = 
@@ -741,7 +850,7 @@
                     <td>${person.name}</td>
                     <td>${person.date}</td>
                     <td>
-                        <button class="btn btn-danger" onclick="deletePerson('${person.name}')">🗑️ Delete</button>
+                        <button class="neu-btn" onclick="deletePerson('${person.name}')" style="padding: 8px 20px;">🗑️ Delete</button>
                     </td>
                 </tr>`;
                 tbody.innerHTML += row;
@@ -773,6 +882,7 @@
         
         // Load initial data
         window.onload = function() {
+            loadUserInfo();
             showAllReports();
             loadPeople();
         };
