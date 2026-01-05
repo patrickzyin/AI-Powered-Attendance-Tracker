@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify, send_file, Response
+from flask import Flask, render_template, request, jsonify, send_file, Response, redirect, session, url_for
 import cv2
 import sqlite3
 import numpy as np
@@ -15,11 +15,17 @@ from cryptography.fernet import Fernet
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from werkzeug.middleware.proxy_fix import ProxyFix
+from werkzeug.security import generate_password_hash, check_password_hash
+from functools import wraps
 
 app = Flask(__name__)
 
+# Use persistent disk on Render, fallback to local for development
+DATA_DIR = os.environ.get('RENDER') and '/opt/render/project/data' or '.'
+os.makedirs(DATA_DIR, exist_ok=True)
+
 # Security: Generate or load secret key
-SECRET_KEY_FILE = 'secret.key'
+SECRET_KEY_FILE = os.path.join(DATA_DIR, 'secret.key')
 if os.path.exists(SECRET_KEY_FILE):
     with open(SECRET_KEY_FILE, 'r') as f:
         app.config['SECRET_KEY'] = f.read().strip()
@@ -29,7 +35,7 @@ else:
         f.write(app.config['SECRET_KEY'])
 
 # Encryption key for face data
-ENCRYPTION_KEY_FILE = 'encryption.key'
+ENCRYPTION_KEY_FILE = os.path.join(DATA_DIR, 'encryption.key')
 if os.path.exists(ENCRYPTION_KEY_FILE):
     with open(ENCRYPTION_KEY_FILE, 'rb') as f:
         encryption_key = f.read()
@@ -40,8 +46,8 @@ else:
 
 cipher_suite = Fernet(encryption_key)
 
-app.config['UPLOAD_FOLDER'] = 'uploads'
-app.config['FACES_DIR'] = 'registered_faces'
+app.config['UPLOAD_FOLDER'] = os.path.join(DATA_DIR, 'uploads')
+app.config['FACES_DIR'] = os.path.join(DATA_DIR, 'registered_faces')
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB max
 
 # HTTPS redirect for production
@@ -90,7 +96,7 @@ def decrypt_file(encrypted_data, output_path):
 
 class AttendanceSystem:
     def __init__(self):
-        self.db_name = "attendance.db"
+        self.db_name = os.path.join(DATA_DIR, "attendance.db")
         self.faces_dir = app.config['FACES_DIR']
         self.encrypted_faces_dir = os.path.join(self.faces_dir, 'encrypted')
         os.makedirs(self.encrypted_faces_dir, exist_ok=True)
@@ -100,16 +106,33 @@ class AttendanceSystem:
         conn = sqlite3.connect(self.db_name)
         cursor = conn.cursor()
         
+        # Users table for authentication
         cursor.execute('''
-            CREATE TABLE IF NOT EXISTS persons (
+            CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL UNIQUE,
-                face_image_path TEXT,
-                encrypted_face_path TEXT,
-                enrollment_date TEXT
+                username TEXT NOT NULL UNIQUE,
+                email TEXT NOT NULL UNIQUE,
+                password_hash TEXT NOT NULL,
+                organization TEXT,
+                created_at TEXT
             )
         ''')
         
+        # Persons table with user_id for data isolation
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS persons (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                face_image_path TEXT,
+                encrypted_face_path TEXT,
+                enrollment_date TEXT,
+                FOREIGN KEY (user_id) REFERENCES users(id),
+                UNIQUE(user_id, name)
+            )
+        ''')
+        
+        # Attendance table
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS attendance (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -123,7 +146,7 @@ class AttendanceSystem:
         conn.commit()
         conn.close()
     
-    def enroll_person(self, name, image_path):
+    def enroll_person(self, name, image_path, user_id):
         try:
             img = cv2.imread(image_path)
             if img is None:
@@ -147,14 +170,17 @@ class AttendanceSystem:
             
             try:
                 cursor.execute('''
-                    INSERT INTO persons (name, enrollment_date)
-                    VALUES (?, ?)
-                ''', (name, str(date.today())))
+                    INSERT INTO persons (user_id, name, enrollment_date)
+                    VALUES (?, ?, ?)
+                ''', (user_id, name, str(date.today())))
                 
                 person_id = cursor.lastrowid
                 
-                # Save unencrypted face for processing
-                dest_path = os.path.join(self.faces_dir, f"{person_id}.jpg")
+                # Save unencrypted face for processing (in user-specific folder)
+                user_faces_dir = os.path.join(self.faces_dir, f"user_{user_id}")
+                os.makedirs(user_faces_dir, exist_ok=True)
+                
+                dest_path = os.path.join(user_faces_dir, f"{person_id}.jpg")
                 
                 face_img = face_objs[0]['face']
                 face_img = (face_img * 255).astype(np.uint8)
@@ -162,7 +188,7 @@ class AttendanceSystem:
                 cv2.imwrite(dest_path, cv2.cvtColor(face_img, cv2.COLOR_RGB2BGR))
                 
                 # Encrypt the face image
-                encrypted_path = os.path.join(self.encrypted_faces_dir, f"{person_id}.enc")
+                encrypted_path = os.path.join(self.encrypted_faces_dir, f"user_{user_id}_{person_id}.enc")
                 encrypted_data = encrypt_file(dest_path)
                 
                 if encrypted_data:
@@ -177,23 +203,24 @@ class AttendanceSystem:
                 return True, "Person enrolled successfully (data encrypted)"
                 
             except sqlite3.IntegrityError:
-                return False, "Name already exists"
+                return False, "Name already exists in your organization"
             finally:
                 conn.close()
                 
         except Exception as e:
             return False, f"Error: {str(e)}"
     
-    def recognize_faces_in_image(self, image_path):
+    def recognize_faces_in_image(self, image_path, user_id):
         try:
             conn = sqlite3.connect(self.db_name)
             cursor = conn.cursor()
-            cursor.execute('SELECT id, name, face_image_path FROM persons')
+            # Only get persons belonging to this user
+            cursor.execute('SELECT id, name, face_image_path FROM persons WHERE user_id = ?', (user_id,))
             persons = cursor.fetchall()
             conn.close()
             
             if not persons:
-                return [], "No enrolled persons in database"
+                return [], "No enrolled persons in your organization"
             
             detected_faces = None
             backend_used = None
