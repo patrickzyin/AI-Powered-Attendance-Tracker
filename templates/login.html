@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login - Face Recognition Attendance</title>
+    <title>Login - AI Attendance Tracker</title>
     <style>
         * {
             margin: 0;
@@ -11,9 +11,21 @@
             box-sizing: border-box;
         }
         
+        :root {
+            --bg-color: #e0e5ec;
+            --primary: #667eea;
+            --secondary: #764ba2;
+            --text-dark: #2c3e50;
+            --text-light: #7f8c8d;
+            --shadow-light: #ffffff;
+            --shadow-dark: #a3b1c6;
+            --success: #2ecc71;
+            --error: #e74c3c;
+        }
+        
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: var(--bg-color);
             min-height: 100vh;
             display: flex;
             align-items: center;
@@ -22,48 +34,62 @@
         }
         
         .auth-container {
-            background: white;
-            border-radius: 20px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-            padding: 50px 40px;
+            background: var(--bg-color);
+            border-radius: 30px;
+            padding: 50px;
             width: 100%;
-            max-width: 450px;
+            max-width: 480px;
+            box-shadow: 20px 20px 60px var(--shadow-dark), 
+                        -20px -20px 60px var(--shadow-light);
+        }
+        
+        .logo {
+            text-align: center;
+            margin-bottom: 10px;
+            font-size: 48px;
         }
         
         h1 {
             text-align: center;
-            color: #667eea;
             margin-bottom: 10px;
-            font-size: 2em;
+            font-size: 32px;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
         }
         
         .subtitle {
             text-align: center;
-            color: #666;
+            color: var(--text-light);
             margin-bottom: 40px;
-            font-size: 0.95em;
+            font-size: 16px;
         }
         
         .tabs {
             display: flex;
-            margin-bottom: 30px;
-            border-bottom: 2px solid #eee;
+            margin-bottom: 40px;
+            background: var(--bg-color);
+            border-radius: 50px;
+            padding: 8px;
+            box-shadow: inset 4px 4px 8px var(--shadow-dark), 
+                        inset -4px -4px 8px var(--shadow-light);
         }
         
         .tab {
             flex: 1;
-            padding: 15px;
+            padding: 12px;
             text-align: center;
             cursor: pointer;
             font-weight: 600;
-            color: #999;
-            border-bottom: 3px solid transparent;
+            color: var(--text-light);
+            border-radius: 50px;
             transition: all 0.3s;
         }
         
         .tab.active {
-            color: #667eea;
-            border-bottom-color: #667eea;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: white;
+            box-shadow: 4px 4px 8px rgba(102, 126, 234, 0.3);
         }
         
         .form-group {
@@ -72,68 +98,100 @@
         
         label {
             display: block;
-            margin-bottom: 8px;
+            margin-bottom: 10px;
             font-weight: 600;
-            color: #333;
+            color: var(--text-dark);
+            font-size: 14px;
+        }
+        
+        .neu-input {
+            position: relative;
         }
         
         input {
             width: 100%;
-            padding: 14px;
-            border: 2px solid #ddd;
-            border-radius: 8px;
+            padding: 16px 20px;
+            border: none;
+            border-radius: 15px;
             font-size: 16px;
-            transition: border 0.3s;
+            background: var(--bg-color);
+            box-shadow: inset 4px 4px 8px var(--shadow-dark), 
+                        inset -4px -4px 8px var(--shadow-light);
+            transition: all 0.3s;
+            color: var(--text-dark);
         }
         
         input:focus {
             outline: none;
-            border-color: #667eea;
+            box-shadow: inset 6px 6px 10px var(--shadow-dark), 
+                        inset -6px -6px 10px var(--shadow-light);
         }
         
-        .btn {
+        input::placeholder {
+            color: var(--text-light);
+        }
+        
+        .neu-btn {
             width: 100%;
-            padding: 15px;
+            padding: 16px;
             border: none;
-            border-radius: 8px;
+            border-radius: 15px;
             font-size: 16px;
             font-weight: 600;
             cursor: pointer;
-            background: #667eea;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
             color: white;
+            box-shadow: 6px 6px 12px rgba(102, 126, 234, 0.3),
+                        -6px -6px 12px rgba(255, 255, 255, 0.5);
             transition: all 0.3s;
             margin-top: 10px;
         }
         
-        .btn:hover {
-            background: #5568d3;
+        .neu-btn:hover:not(:disabled) {
             transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+            box-shadow: 8px 8px 16px rgba(102, 126, 234, 0.4),
+                        -8px -8px 16px rgba(255, 255, 255, 0.6);
         }
         
-        .btn:disabled {
-            background: #ccc;
+        .neu-btn:active:not(:disabled) {
+            transform: translateY(0);
+            box-shadow: 4px 4px 8px rgba(102, 126, 234, 0.3);
+        }
+        
+        .neu-btn:disabled {
+            opacity: 0.6;
             cursor: not-allowed;
-            transform: none;
         }
         
         .alert {
-            padding: 12px;
-            border-radius: 8px;
+            padding: 14px;
+            border-radius: 12px;
             margin-bottom: 20px;
             display: none;
+            animation: slideDown 0.3s;
+        }
+        
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
         
         .alert-error {
-            background: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
+            background: rgba(231, 76, 60, 0.1);
+            color: var(--error);
+            border: 2px solid rgba(231, 76, 60, 0.3);
         }
         
         .alert-success {
-            background: #d4edda;
-            color: #155724;
-            border: 1px solid #c3e6cb;
+            background: rgba(46, 204, 113, 0.1);
+            color: var(--success);
+            border: 2px solid rgba(46, 204, 113, 0.3);
         }
         
         .form-container {
@@ -146,28 +204,72 @@
         }
         
         @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
         
         .privacy-note {
-            margin-top: 20px;
-            padding: 15px;
-            background: #f8f9fa;
-            border-radius: 8px;
-            font-size: 0.85em;
-            color: #666;
+            margin-top: 25px;
+            padding: 20px;
+            background: var(--bg-color);
+            border-radius: 15px;
+            box-shadow: inset 3px 3px 6px var(--shadow-dark), 
+                        inset -3px -3px 6px var(--shadow-light);
+            font-size: 13px;
+            color: var(--text-light);
+            line-height: 1.6;
         }
         
         .privacy-note strong {
-            color: #667eea;
+            color: var(--primary);
+            display: block;
+            margin-bottom: 5px;
+        }
+        
+        .back-link {
+            text-align: center;
+            margin-top: 25px;
+        }
+        
+        .back-link a {
+            color: var(--primary);
+            text-decoration: none;
+            font-weight: 600;
+        }
+        
+        .back-link a:hover {
+            text-decoration: underline;
+        }
+        
+        .password-toggle {
+            position: absolute;
+            right: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 5px;
+            color: var(--text-light);
+        }
+        
+        .password-toggle svg {
+            width: 20px;
+            height: 20px;
         }
     </style>
 </head>
 <body>
     <div class="auth-container">
-        <h1>🎭 Face Recognition Attendance</h1>
-        <p class="subtitle">Secure, private attendance tracking</p>
+        <div class="logo">🎭</div>
+        <h1>AI Attendance Tracker</h1>
+        <p class="subtitle">Secure attendance tracking</p>
         
         <div class="tabs">
             <div class="tab active" onclick="showForm('login')">Login</div>
@@ -180,49 +282,84 @@
         <div id="login-form" class="form-container active">
             <div class="form-group">
                 <label for="login-username">Username</label>
-                <input type="text" id="login-username" placeholder="Enter your username">
+                <div class="neu-input">
+                    <input type="text" id="login-username" placeholder="Enter your username" autocomplete="username">
+                </div>
             </div>
             
             <div class="form-group">
                 <label for="login-password">Password</label>
-                <input type="password" id="login-password" placeholder="Enter your password">
+                <div class="neu-input" style="position: relative;">
+                    <input type="password" id="login-password" placeholder="Enter your password" autocomplete="current-password">
+                    <button type="button" class="password-toggle" onclick="togglePassword('login-password')">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                            <circle cx="12" cy="12" r="3"/>
+                        </svg>
+                    </button>
+                </div>
             </div>
             
-            <button class="btn" onclick="login()">Login</button>
+            <button class="neu-btn" onclick="login()" id="login-btn">Login</button>
         </div>
         
         <!-- Register Form -->
         <div id="register-form" class="form-container">
             <div class="form-group">
                 <label for="register-username">Username</label>
-                <input type="text" id="register-username" placeholder="Choose a username">
+                <div class="neu-input">
+                    <input type="text" id="register-username" placeholder="Choose a username" autocomplete="username">
+                </div>
             </div>
             
             <div class="form-group">
                 <label for="register-email">Email</label>
-                <input type="email" id="register-email" placeholder="your@email.com">
+                <div class="neu-input">
+                    <input type="email" id="register-email" placeholder="your@email.com" autocomplete="email">
+                </div>
             </div>
             
             <div class="form-group">
                 <label for="register-password">Password</label>
-                <input type="password" id="register-password" placeholder="At least 8 characters">
+                <div class="neu-input" style="position: relative;">
+                    <input type="password" id="register-password" placeholder="At least 8 characters" autocomplete="new-password">
+                    <button type="button" class="password-toggle" onclick="togglePassword('register-password')">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                            <circle cx="12" cy="12" r="3"/>
+                        </svg>
+                    </button>
+                </div>
             </div>
             
             <div class="form-group">
                 <label for="register-organization">Organization (Optional)</label>
-                <input type="text" id="register-organization" placeholder="School, Company, etc.">
+                <div class="neu-input">
+                    <input type="text" id="register-organization" placeholder="School, Company, etc." autocomplete="organization">
+                </div>
             </div>
             
-            <button class="btn" onclick="register()">Create Account</button>
+            <button class="neu-btn" onclick="register()" id="register-btn">Create Account</button>
             
             <div class="privacy-note">
-                <strong>🔒 Privacy First:</strong> Your facial data is encrypted with AES-128. 
-                Only you can access your registered people. We never share your data.
+                <strong>🔒 Privacy & Security</strong>
+                Your facial data is encrypted with AES-128. Only you can access your registered people. We never share your data with third parties.
             </div>
+        </div>
+        
+        <div class="back-link">
+            <a href="/">← Back to Home</a>
         </div>
     </div>
     
     <script>
+        // Check for hash on load
+        window.addEventListener('load', function() {
+            if (window.location.hash === '#register') {
+                showForm('register');
+            }
+        });
+        
         function showForm(formType) {
             document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
             document.querySelectorAll('.form-container').forEach(f => f.classList.remove('active'));
@@ -230,6 +367,11 @@
             event.target.classList.add('active');
             document.getElementById(formType + '-form').classList.add('active');
             hideAlert();
+        }
+        
+        function togglePassword(inputId) {
+            const input = document.getElementById(inputId);
+            input.type = input.type === 'password' ? 'text' : 'password';
         }
         
         function showAlert(message, type) {
@@ -246,11 +388,15 @@
         async function login() {
             const username = document.getElementById('login-username').value.trim();
             const password = document.getElementById('login-password').value;
+            const btn = document.getElementById('login-btn');
             
             if (!username || !password) {
                 showAlert('Please enter username and password', 'error');
                 return;
             }
+            
+            btn.disabled = true;
+            btn.textContent = 'Logging in...';
             
             try {
                 const response = await fetch('/api/login', {
@@ -266,13 +412,17 @@
                 if (data.success) {
                     showAlert('Login successful! Redirecting...', 'success');
                     setTimeout(() => {
-                        window.location.href = '/';
+                        window.location.href = '/dashboard';
                     }, 1000);
                 } else {
                     showAlert(data.message, 'error');
+                    btn.disabled = false;
+                    btn.textContent = 'Login';
                 }
             } catch (err) {
                 showAlert('Login failed: ' + err.message, 'error');
+                btn.disabled = false;
+                btn.textContent = 'Login';
             }
         }
         
@@ -281,6 +431,7 @@
             const email = document.getElementById('register-email').value.trim();
             const password = document.getElementById('register-password').value;
             const organization = document.getElementById('register-organization').value.trim();
+            const btn = document.getElementById('register-btn');
             
             if (!username || !email || !password) {
                 showAlert('Please fill in all required fields', 'error');
@@ -291,6 +442,9 @@
                 showAlert('Password must be at least 8 characters', 'error');
                 return;
             }
+            
+            btn.disabled = true;
+            btn.textContent = 'Creating account...';
             
             try {
                 const response = await fetch('/api/register', {
@@ -304,15 +458,19 @@
                 const data = await response.json();
                 
                 if (data.success) {
-                    showAlert('Registration successful! Redirecting...', 'success');
+                    showAlert('Account created! Redirecting...', 'success');
                     setTimeout(() => {
-                        window.location.href = '/';
+                        window.location.href = '/dashboard';
                     }, 1000);
                 } else {
                     showAlert(data.message, 'error');
+                    btn.disabled = false;
+                    btn.textContent = 'Create Account';
                 }
             } catch (err) {
                 showAlert('Registration failed: ' + err.message, 'error');
+                btn.disabled = false;
+                btn.textContent = 'Create Account';
             }
         }
         

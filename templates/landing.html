@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Attendance Tracker</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        :root {
+            --bg-color: #e0e5ec;
+            --primary: #667eea;
+            --secondary: #764ba2;
+            --text-dark: #2c3e50;
+            --text-light: #7f8c8d;
+            --shadow-light: #ffffff;
+            --shadow-dark: #a3b1c6;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: var(--bg-color);
+            color: var(--text-dark);
+            overflow-x: hidden;
+        }
+        
+        /* Navbar */
+        nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 50px;
+            background: var(--bg-color);
+            box-shadow: 5px 5px 15px var(--shadow-dark), 
+                        -5px -5px 15px var(--shadow-light);
+        }
+        
+        .logo {
+            font-size: 28px;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .nav-links {
+            display: flex;
+            gap: 30px;
+            align-items: center;
+        }
+        
+        .nav-links a {
+            text-decoration: none;
+            color: var(--text-dark);
+            font-weight: 500;
+            transition: color 0.3s;
+        }
+        
+        .nav-links a:hover {
+            color: var(--primary);
+        }
+        
+        .neu-btn {
+            padding: 12px 30px;
+            border: none;
+            border-radius: 50px;
+            background: var(--bg-color);
+            box-shadow: 5px 5px 15px var(--shadow-dark), 
+                        -5px -5px 15px var(--shadow-light);
+            cursor: pointer;
+            font-weight: 600;
+            color: var(--text-dark);
+            transition: all 0.3s;
+        }
+        
+        .neu-btn:hover {
+            box-shadow: 2px 2px 8px var(--shadow-dark), 
+                        -2px -2px 8px var(--shadow-light);
+        }
+        
+        .neu-btn.primary {
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: white;
+            box-shadow: 5px 5px 15px rgba(102, 126, 234, 0.3);
+        }
+        
+        .neu-btn.primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 5px 8px 20px rgba(102, 126, 234, 0.4);
+        }
+        
+        /* Hero Section */
+        .hero {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 80px 50px;
+            min-height: 90vh;
+        }
+        
+        .hero-content {
+            flex: 1;
+            max-width: 600px;
+        }
+        
+        .hero h1 {
+            font-size: 56px;
+            line-height: 1.2;
+            margin-bottom: 20px;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .hero p {
+            font-size: 20px;
+            color: var(--text-light);
+            margin-bottom: 40px;
+            line-height: 1.6;
+        }
+        
+        .cta-buttons {
+            display: flex;
+            gap: 20px;
+        }
+        
+        .hero-visual {
+            flex: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .neu-card {
+            background: var(--bg-color);
+            border-radius: 30px;
+            padding: 40px;
+            box-shadow: 20px 20px 60px var(--shadow-dark), 
+                        -20px -20px 60px var(--shadow-light);
+            max-width: 400px;
+        }
+        
+        .face-icon {
+            width: 200px;
+            height: 200px;
+            margin: 0 auto 30px;
+            background: var(--bg-color);
+            border-radius: 50%;
+            box-shadow: inset 8px 8px 16px var(--shadow-dark), 
+                        inset -8px -8px 16px var(--shadow-light);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .face-icon svg {
+            width: 100px;
+            height: 100px;
+            stroke: url(#gradient);
+            stroke-width: 2;
+        }
+        
+        .badge {
+            display: inline-block;
+            padding: 8px 16px;
+            border-radius: 20px;
+            background: var(--bg-color);
+            box-shadow: inset 2px 2px 5px var(--shadow-dark), 
+                        inset -2px -2px 5px var(--shadow-light);
+            font-size: 14px;
+            color: var(--primary);
+            font-weight: 600;
+            margin-bottom: 20px;
+        }
+        
+        /* Features Section */
+        .features {
+            padding: 80px 50px;
+            text-align: center;
+        }
+        
+        .features h2 {
+            font-size: 42px;
+            margin-bottom: 60px;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 40px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .feature-card {
+            background: var(--bg-color);
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 10px 10px 30px var(--shadow-dark), 
+                        -10px -10px 30px var(--shadow-light);
+            transition: transform 0.3s;
+        }
+        
+        .feature-card:hover {
+            transform: translateY(-10px);
+        }
+        
+        .feature-icon {
+            width: 80px;
+            height: 80px;
+            margin: 0 auto 20px;
+            background: var(--bg-color);
+            border-radius: 50%;
+            box-shadow: inset 4px 4px 8px var(--shadow-dark), 
+                        inset -4px -4px 8px var(--shadow-light);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .feature-icon svg {
+            width: 40px;
+            height: 40px;
+            stroke: var(--primary);
+        }
+        
+        .feature-card h3 {
+            font-size: 24px;
+            margin-bottom: 15px;
+            color: var(--text-dark);
+        }
+        
+        .feature-card p {
+            color: var(--text-light);
+            line-height: 1.6;
+        }
+        
+        /* CTA Section */
+        .cta-section {
+            padding: 80px 50px;
+            text-align: center;
+            background: var(--bg-color);
+        }
+        
+        .cta-box {
+            max-width: 800px;
+            margin: 0 auto;
+            background: var(--bg-color);
+            border-radius: 30px;
+            padding: 60px;
+            box-shadow: 20px 20px 60px var(--shadow-dark), 
+                        -20px -20px 60px var(--shadow-light);
+        }
+        
+        .cta-box h2 {
+            font-size: 42px;
+            margin-bottom: 20px;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .cta-box p {
+            font-size: 18px;
+            color: var(--text-light);
+            margin-bottom: 40px;
+        }
+        
+        /* Footer */
+        footer {
+            padding: 40px 50px;
+            text-align: center;
+            color: var(--text-light);
+            background: var(--bg-color);
+            box-shadow: 0 -5px 15px var(--shadow-dark);
+        }
+        
+        .footer-links {
+            margin-top: 15px;
+        }
+        
+        .footer-links a {
+            color: var(--primary);
+            text-decoration: none;
+            margin: 0 15px;
+            font-weight: 500;
+        }
+        
+        .footer-links a:hover {
+            text-decoration: underline;
+        }
+        
+        @media (max-width: 768px) {
+            nav {
+                flex-direction: column;
+                gap: 20px;
+            }
+            
+            .hero {
+                flex-direction: column;
+                text-align: center;
+            }
+            
+            .hero h1 {
+                font-size: 36px;
+            }
+            
+            .cta-buttons {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <nav>
+        <div class="logo">🎭 AI Attendance Tracker</div>
+        <div class="nav-links">
+            <a href="#features">Features</a>
+            <a href="#about">About</a>
+            <button class="neu-btn" onclick="window.location.href='/login'">Login</button>
+            <button class="neu-btn primary" onclick="window.location.href='/login#register'">Get Started</button>
+        </div>
+    </nav>
+    
+    <section class="hero">
+        <div class="hero-content">
+            <span class="badge">🎓 Student Project • Open Source</span>
+            <h1>Smart Attendance with Face Recognition</h1>
+            <p>A portfolio project demonstrating AI-powered attendance tracking. Built with privacy-first architecture and enterprise-grade security.</p>
+            <div class="cta-buttons">
+                <button class="neu-btn primary" style="font-size: 18px; padding: 15px 40px;" onclick="window.location.href='/login#register'">Try It Out</button>
+                <button class="neu-btn" style="font-size: 18px; padding: 15px 40px;" onclick="document.getElementById('features').scrollIntoView({behavior: 'smooth'})">Learn More</button>
+            </div>
+        </div>
+        
+        <div class="hero-visual">
+            <div class="neu-card">
+                <div class="face-icon">
+                    <svg viewBox="0 0 24 24" fill="none">
+                        <defs>
+                            <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" style="stop-color:#667eea"/>
+                                <stop offset="100%" style="stop-color:#764ba2"/>
+                            </linearGradient>
+                        </defs>
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                        <circle cx="12" cy="7" r="4"/>
+                    </svg>
+                </div>
+                <h3 style="text-align: center; margin-bottom: 15px;">Instant Recognition</h3>
+                <p style="text-align: center; color: var(--text-light);">AI-powered face detection using DeepFace and Facenet512</p>
+            </div>
+        </div>
+    </section>
+    
+    <section class="features" id="features">
+        <h2>Built to Learn, Designed for Privacy</h2>
+        <div class="features-grid">
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke-width="2">
+                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                        <path d="M7 11V7a5 5 0 0110 0v4"/>
+                    </svg>
+                </div>
+                <h3>Privacy First</h3>
+                <p>Your data is isolated and encrypted. Each user's facial data is protected with AES-128 encryption.</p>
+            </div>
+            
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke-width="2">
+                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                        <circle cx="9" cy="7" r="4"/>
+                        <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                        <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                    </svg>
+                </div>
+                <h3>Group Recognition</h3>
+                <p>Upload a single photo to mark attendance for multiple people at once.</p>
+            </div>
+            
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke-width="2">
+                        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+                    </svg>
+                </div>
+                <h3>Real-Time Reports</h3>
+                <p>View attendance history, export to CSV, and track patterns over time.</p>
+            </div>
+            
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <polyline points="12 6 12 12 16 14"/>
+                    </svg>
+                </div>
+                <h3>100% Free</h3>
+                <p>This is a portfolio project. No payments, no subscriptions, no hidden costs.</p>
+            </div>
+            
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke-width="2">
+                        <rect x="2" y="7" width="20" height="14" rx="2" ry="2"/>
+                        <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>
+                    </svg>
+                </div>
+                <h3>Mobile & Desktop</h3>
+                <p>Works on phones, tablets, and computers. Use your device camera or upload photos.</p>
+            </div>
+            
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke-width="2">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                    </svg>
+                </div>
+                <h3>Secure Architecture</h3>
+                <p>Multi-tenant design ensures complete data isolation between organizations.</p>
+            </div>
+        </div>
+    </section>
+    
+    <section class="cta-section">
+        <div class="cta-box">
+            <h2>Ready to Try It?</h2>
+            <p>Create a free account and test the system. Perfect for schools, clubs, or small teams.</p>
+            <button class="neu-btn primary" style="font-size: 20px; padding: 18px 50px;" onclick="window.location.href='/login#register'">Create Account</button>
+        </div>
+    </section>
+    
+    <footer id="about">
+        <p><strong>About This Project</strong></p>
+        <p style="margin-top: 10px;">A full-stack web application showcasing AI/ML integration, user authentication, and privacy-focused design.</p>
+        <p style="margin-top: 15px; font-size: 14px;">Built with Flask, DeepFace, TensorFlow • Secured with AES-128 Encryption</p>
+        <div class="footer-links">
+            <a href="https://github.com/patrickzyin/AI-Powered-Attendance-Tracker" target="_blank">GitHub</a>
+            <a href="/login">Login</a>
+        </div>
+        <p style="margin-top: 20px; font-size: 14px;">&copy; 2026 Portfolio Project by Patrick Yin</p>
+    </footer>
+</body>
+</html>

@@ -52,12 +52,12 @@ app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB max
 
 # HTTPS redirect for production
 @app.before_request
-def before_request():
+def before_request_handler():
     if not request.is_secure and os.environ.get('FLASK_ENV') == 'production':
         url = request.url.replace('http://', 'https://', 1)
         return redirect(url, code=301)
 
-# ProxyFix for Heroku
+# ProxyFix for Render
 app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 
 # Rate limiting
@@ -200,7 +200,7 @@ class AttendanceSystem:
                 ''', (dest_path, encrypted_path, person_id))
                 
                 conn.commit()
-                return True, "Person enrolled successfully (data encrypted)"
+                return True, "Person enrolled successfully"
                 
             except sqlite3.IntegrityError:
                 return False, "Name already exists in your organization"
@@ -214,7 +214,6 @@ class AttendanceSystem:
         try:
             conn = sqlite3.connect(self.db_name)
             cursor = conn.cursor()
-            # Only get persons belonging to this user
             cursor.execute('SELECT id, name, face_image_path FROM persons WHERE user_id = ?', (user_id,))
             persons = cursor.fetchall()
             conn.close()
@@ -340,7 +339,7 @@ class AttendanceSystem:
         
         return marked, already_marked
     
-    def get_attendance_report(self, start_date=None, end_date=None):
+    def get_attendance_report(self, start_date=None, end_date=None, user_id=None):
         conn = sqlite3.connect(self.db_name)
         
         query = '''
@@ -349,8 +348,14 @@ class AttendanceSystem:
             JOIN persons p ON a.person_id = p.id
         '''
         
+        conditions = []
+        if user_id:
+            conditions.append(f"p.user_id = {user_id}")
         if start_date and end_date:
-            query += f" WHERE a.date BETWEEN '{start_date}' AND '{end_date}'"
+            conditions.append(f"a.date BETWEEN '{start_date}' AND '{end_date}'")
+        
+        if conditions:
+            query += " WHERE " + " AND ".join(conditions)
         
         query += " ORDER BY a.date DESC, a.time DESC"
         
@@ -359,25 +364,25 @@ class AttendanceSystem:
         
         return df
     
-    def get_all_persons(self):
+    def get_all_persons(self, user_id):
         conn = sqlite3.connect(self.db_name)
         cursor = conn.cursor()
-        cursor.execute('SELECT name, enrollment_date FROM persons ORDER BY name')
+        cursor.execute('SELECT name, enrollment_date FROM persons WHERE user_id = ? ORDER BY name', (user_id,))
         persons = cursor.fetchall()
         conn.close()
         return persons
     
-    def delete_person(self, name):
+    def delete_person(self, name, user_id):
         conn = None
         try:
             conn = sqlite3.connect(self.db_name)
             cursor = conn.cursor()
             
-            cursor.execute('SELECT id, face_image_path FROM persons WHERE name = ?', (name,))
+            cursor.execute('SELECT id, face_image_path FROM persons WHERE name = ? AND user_id = ?', (name, user_id))
             result = cursor.fetchone()
             
             if not result:
-                return False, "Person not found"
+                return False, "Person not found or you don't have permission"
             
             person_id, face_path = result
             
@@ -405,12 +410,126 @@ class AttendanceSystem:
 # Initialize system
 system = AttendanceSystem()
 
-@app.route('/')
-def index():
-    return render_template('index.html')
+# Authentication decorator
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'user_id' not in session:
+            return jsonify({'success': False, 'message': 'Please log in', 'redirect': '/login'}), 401
+        return f(*args, **kwargs)
+    return decorated_function
 
+# Landing page
+@app.route('/')
+def landing():
+    return render_template('landing.html')
+
+# Login page
+@app.route('/login')
+def login_page():
+    if 'user_id' in session:
+        return redirect('/dashboard')
+    return render_template('login.html')
+
+# Dashboard (main app)
+@app.route('/dashboard')
+def dashboard():
+    if 'user_id' not in session:
+        return redirect('/login')
+    return render_template('dashboard.html')
+
+# Authentication routes
+@app.route('/api/login', methods=['POST'])
+@limiter.limit("5 per minute")
+def login():
+    data = request.json
+    username = data.get('username')
+    password = data.get('password')
+    
+    if not username or not password:
+        return jsonify({'success': False, 'message': 'Username and password required'})
+    
+    try:
+        conn = sqlite3.connect(system.db_name)
+        cursor = conn.cursor()
+        
+        cursor.execute('SELECT id, password_hash, username, organization FROM users WHERE username = ?', (username,))
+        user = cursor.fetchone()
+        conn.close()
+        
+        if user and check_password_hash(user[1], password):
+            session['user_id'] = user[0]
+            session['username'] = user[2]
+            session['organization'] = user[3]
+            return jsonify({'success': True, 'message': 'Login successful'})
+        
+        return jsonify({'success': False, 'message': 'Invalid username or password'})
+        
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)})
+
+@app.route('/api/register', methods=['POST'])
+@limiter.limit("3 per hour")
+def register():
+    data = request.json
+    username = data.get('username')
+    email = data.get('email')
+    password = data.get('password')
+    organization = data.get('organization', '')
+    
+    if not username or not email or not password:
+        return jsonify({'success': False, 'message': 'All fields required'})
+    
+    if len(password) < 8:
+        return jsonify({'success': False, 'message': 'Password must be at least 8 characters'})
+    
+    try:
+        conn = sqlite3.connect(system.db_name)
+        cursor = conn.cursor()
+        
+        password_hash = generate_password_hash(password)
+        
+        cursor.execute('''
+            INSERT INTO users (username, email, password_hash, organization, created_at)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (username, email, password_hash, organization, str(datetime.now())))
+        
+        user_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+        
+        session['user_id'] = user_id
+        session['username'] = username
+        session['organization'] = organization
+        
+        return jsonify({'success': True, 'message': 'Registration successful'})
+        
+    except sqlite3.IntegrityError as e:
+        if 'username' in str(e):
+            return jsonify({'success': False, 'message': 'Username already exists'})
+        elif 'email' in str(e):
+            return jsonify({'success': False, 'message': 'Email already exists'})
+        return jsonify({'success': False, 'message': 'Registration failed'})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)})
+
+@app.route('/api/logout', methods=['POST'])
+def logout():
+    session.clear()
+    return jsonify({'success': True, 'message': 'Logged out successfully'})
+
+@app.route('/api/user')
+@login_required
+def get_user():
+    return jsonify({
+        'username': session.get('username'),
+        'organization': session.get('organization')
+    })
+
+# Attendance routes
 @app.route('/api/enroll', methods=['POST'])
-@limiter.limit("10 per hour")  # Limit enrollments
+@limiter.limit("10 per hour")
+@login_required
 def enroll():
     try:
         name = request.form.get('name')
@@ -419,18 +538,16 @@ def enroll():
         if not name or not image_data:
             return jsonify({'success': False, 'message': 'Name and image required'})
         
-        # Decode base64 image
         image_data = image_data.split(',')[1]
         image_bytes = base64.b64decode(image_data)
         
-        # Save temporary file
         temp_path = os.path.join(app.config['UPLOAD_FOLDER'], 'temp_enroll.jpg')
         with open(temp_path, 'wb') as f:
             f.write(image_bytes)
         
-        success, message = system.enroll_person(name, temp_path)
+        user_id = session.get('user_id')
+        success, message = system.enroll_person(name, temp_path, user_id)
         
-        # Clean up
         if os.path.exists(temp_path):
             os.remove(temp_path)
         
@@ -440,7 +557,8 @@ def enroll():
         return jsonify({'success': False, 'message': str(e)})
 
 @app.route('/api/mark-attendance', methods=['POST'])
-@limiter.limit("30 per hour")  # Limit attendance marking
+@limiter.limit("30 per hour")
+@login_required
 def mark_attendance():
     try:
         image_data = request.form.get('image')
@@ -448,18 +566,16 @@ def mark_attendance():
         if not image_data:
             return jsonify({'success': False, 'message': 'Image required'})
         
-        # Decode base64 image
         image_data = image_data.split(',')[1]
         image_bytes = base64.b64decode(image_data)
         
-        # Save temporary file
         temp_path = os.path.join(app.config['UPLOAD_FOLDER'], 'temp_attendance.jpg')
         with open(temp_path, 'wb') as f:
             f.write(image_bytes)
         
-        recognized_persons, debug_info = system.recognize_faces_in_image(temp_path)
+        user_id = session.get('user_id')
+        recognized_persons, debug_info = system.recognize_faces_in_image(temp_path, user_id)
         
-        # Clean up
         if os.path.exists(temp_path):
             os.remove(temp_path)
         
@@ -484,36 +600,43 @@ def mark_attendance():
         return jsonify({'success': False, 'message': str(e)})
 
 @app.route('/api/persons')
+@login_required
 def get_persons():
-    persons = system.get_all_persons()
+    user_id = session.get('user_id')
+    persons = system.get_all_persons(user_id)
     return jsonify({'persons': [{'name': p[0], 'date': p[1]} for p in persons]})
 
 @app.route('/api/attendance')
+@login_required
 def get_attendance():
     start_date = request.args.get('start_date')
     end_date = request.args.get('end_date')
+    user_id = session.get('user_id')
     
-    df = system.get_attendance_report(start_date, end_date)
+    df = system.get_attendance_report(start_date, end_date, user_id)
     
     return jsonify({
         'records': df.to_dict('records')
     })
 
 @app.route('/api/delete-person', methods=['POST'])
-@limiter.limit("20 per hour")  # Limit deletions
+@limiter.limit("20 per hour")
+@login_required
 def delete_person():
     name = request.json.get('name')
-    success, message = system.delete_person(name)
+    user_id = session.get('user_id')
+    success, message = system.delete_person(name, user_id)
     return jsonify({'success': success, 'message': message})
 
 @app.route('/api/export-csv')
+@login_required
 def export_csv():
     start_date = request.args.get('start_date')
     end_date = request.args.get('end_date')
+    user_id = session.get('user_id')
     
-    df = system.get_attendance_report(start_date, end_date)
+    df = system.get_attendance_report(start_date, end_date, user_id)
     
-    # Create CSV in memory
     output = BytesIO()
     df.to_csv(output, index=False)
     output.seek(0)
