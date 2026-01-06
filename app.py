@@ -553,24 +553,43 @@ def enroll():
 @limiter.limit("30 per hour")
 @login_required
 def mark_attendance():
+    temp_path = None
     try:
         image_data = request.form.get('image')
         
         if not image_data:
-            return jsonify({'success': False, 'message': 'Image required'})
+            return jsonify({'success': False, 'message': 'Image required', 'debug': 'No image data received'})
         
-        image_data = image_data.split(',')[1]
-        image_bytes = base64.b64decode(image_data)
+        # Decode image
+        try:
+            image_data = image_data.split(',')[1]
+            image_bytes = base64.b64decode(image_data)
+        except Exception as e:
+            return jsonify({'success': False, 'message': 'Invalid image data', 'debug': str(e)})
         
-        temp_path = os.path.join(app.config['UPLOAD_FOLDER'], 'temp_attendance.jpg')
-        with open(temp_path, 'wb') as f:
-            f.write(image_bytes)
+        # Save temporary file
+        temp_path = os.path.join(app.config['UPLOAD_FOLDER'], f'temp_attendance_{datetime.now().timestamp()}.jpg')
+        try:
+            with open(temp_path, 'wb') as f:
+                f.write(image_bytes)
+        except Exception as e:
+            return jsonify({'success': False, 'message': 'Failed to save image', 'debug': str(e)})
+        
+        # Verify file exists and is readable
+        if not os.path.exists(temp_path):
+            return jsonify({'success': False, 'message': 'Image file not found', 'debug': 'File save failed'})
         
         user_id = session.get('user_id')
-        recognized_persons, debug_info = system.recognize_faces_in_image(temp_path, user_id)
         
-        if os.path.exists(temp_path):
-            os.remove(temp_path)
+        # Recognize faces with timeout protection
+        try:
+            recognized_persons, debug_info = system.recognize_faces_in_image(temp_path, user_id)
+        except Exception as e:
+            return jsonify({
+                'success': False, 
+                'message': 'Recognition failed',
+                'debug': f'Error during recognition: {str(e)}'
+            })
         
         if not recognized_persons:
             return jsonify({
@@ -579,7 +598,15 @@ def mark_attendance():
                 'debug': debug_info
             })
         
-        marked, already_marked = system.mark_attendance([p[0] for p in recognized_persons])
+        # Mark attendance
+        try:
+            marked, already_marked = system.mark_attendance([p[0] for p in recognized_persons])
+        except Exception as e:
+            return jsonify({
+                'success': False,
+                'message': 'Failed to mark attendance',
+                'debug': f'Database error: {str(e)}'
+            })
         
         return jsonify({
             'success': True,
@@ -590,7 +617,18 @@ def mark_attendance():
         })
         
     except Exception as e:
-        return jsonify({'success': False, 'message': str(e)})
+        return jsonify({
+            'success': False, 
+            'message': 'Server error',
+            'debug': f'Unexpected error: {str(e)}'
+        })
+    finally:
+        # Always cleanup temp file
+        if temp_path and os.path.exists(temp_path):
+            try:
+                os.remove(temp_path)
+            except:
+                pass
 
 @app.route('/api/persons')
 @login_required
