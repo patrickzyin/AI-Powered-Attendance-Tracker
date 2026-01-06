@@ -221,7 +221,7 @@ class AttendanceSystem:
             if not persons:
                 return [], "No enrolled persons in your organization"
             
-            # Use only OpenCV detector (fastest)
+            # Use only OpenCV detector (fastest and lightest)
             try:
                 detected_faces = DeepFace.extract_faces(
                     img_path=image_path,
@@ -256,10 +256,11 @@ class AttendanceSystem:
                             continue
                         
                         try:
+                            # Use Facenet (lighter than Facenet512)
                             result = DeepFace.verify(
                                 img1_path=temp_face_path,
                                 img2_path=face_path,
-                                model_name='Facenet512',
+                                model_name='Facenet',  # Changed from Facenet512
                                 detector_backend='skip',
                                 enforce_detection=False
                             )
@@ -269,7 +270,7 @@ class AttendanceSystem:
                             
                             if distance < best_distance:
                                 best_distance = distance
-                                if distance < 0.7:
+                                if distance < 0.4:  # Adjusted threshold for Facenet
                                     best_match = (person_id, name)
                                     
                         except Exception as e:
