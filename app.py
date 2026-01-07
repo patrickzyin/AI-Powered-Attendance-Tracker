@@ -114,7 +114,7 @@ class AttendanceSystem:
         conn.close()
     
     def enroll_person(self, name, image_path, user_id):
-        """Enroll person and store their face embedding for faster comparison"""
+        """Enroll person - just save face, generate embedding later on first recognition"""
         try:
             img = cv2.imread(image_path)
             if img is None:
@@ -134,68 +134,43 @@ class AttendanceSystem:
             if len(face_objs) > 1:
                 return False, "Multiple faces detected. Please use an image with only one face"
             
-            # Save face image first
-            user_faces_dir = os.path.join(self.faces_dir, f"user_{user_id}")
-            os.makedirs(user_faces_dir, exist_ok=True)
-            
-            temp_person_id = f"temp_{os.getpid()}"
-            dest_path = os.path.join(user_faces_dir, f"{temp_person_id}.jpg")
-            
-            # Extract and save face
-            face_img = face_objs[0]['face']
-            face_img = (face_img * 255).astype(np.uint8)
-            face_img = cv2.resize(face_img, (112, 112))  # Even smaller for memory
-            cv2.imwrite(dest_path, cv2.cvtColor(face_img, cv2.COLOR_RGB2BGR), [cv2.IMWRITE_JPEG_QUALITY, 85])
-            
-            # Generate embedding ONCE during enrollment
-            try:
-                embedding = DeepFace.represent(
-                    img_path=dest_path,
-                    model_name='Facenet',
-                    detector_backend='skip',
-                    enforce_detection=False
-                )[0]["embedding"]
-                
-                # Convert to JSON string for storage
-                embedding_str = json.dumps(embedding)
-            except Exception as e:
-                if os.path.exists(dest_path):
-                    os.remove(dest_path)
-                return False, f"Failed to generate face embedding: {str(e)}"
-            
-            # Store in database
             conn = sqlite3.connect(self.db_name)
             cursor = conn.cursor()
             
             try:
                 cursor.execute('''
-                    INSERT INTO persons (user_id, name, face_embedding, enrollment_date)
-                    VALUES (?, ?, ?, ?)
-                ''', (user_id, name, embedding_str, str(date.today())))
+                    INSERT INTO persons (user_id, name, enrollment_date)
+                    VALUES (?, ?, ?)
+                ''', (user_id, name, str(date.today())))
                 
                 person_id = cursor.lastrowid
                 
-                # Rename file to use actual person_id
-                final_path = os.path.join(user_faces_dir, f"{person_id}.jpg")
-                os.rename(dest_path, final_path)
+                # Save face in user-specific folder
+                user_faces_dir = os.path.join(self.faces_dir, f"user_{user_id}")
+                os.makedirs(user_faces_dir, exist_ok=True)
+                
+                dest_path = os.path.join(user_faces_dir, f"{person_id}.jpg")
+                
+                # Extract and save face
+                face_img = face_objs[0]['face']
+                face_img = (face_img * 255).astype(np.uint8)
+                face_img = cv2.resize(face_img, (112, 112))
+                cv2.imwrite(dest_path, cv2.cvtColor(face_img, cv2.COLOR_RGB2BGR), [cv2.IMWRITE_JPEG_QUALITY, 85])
                 
                 cursor.execute('''
                     UPDATE persons SET face_image_path = ? WHERE id = ?
-                ''', (final_path, person_id))
+                ''', (dest_path, person_id))
                 
                 conn.commit()
                 
                 # Cleanup
                 del face_img
                 del face_objs
-                del embedding
                 gc.collect()
                 
                 return True, "Person enrolled successfully"
                 
             except sqlite3.IntegrityError:
-                if os.path.exists(dest_path):
-                    os.remove(dest_path)
                 return False, "Name already exists in your organization"
             finally:
                 conn.close()
@@ -206,29 +181,17 @@ class AttendanceSystem:
             gc.collect()
     
     def recognize_faces_in_image(self, image_path, user_id):
-        """OPTIMIZED: Use pre-computed embeddings instead of re-computing"""
+        """Generate embeddings on-the-fly for lazy loading"""
         try:
-            # Get enrolled persons WITH embeddings
+            # Get enrolled persons (may not have embeddings yet)
             conn = sqlite3.connect(self.db_name)
             cursor = conn.cursor()
-            cursor.execute('SELECT id, name, face_embedding FROM persons WHERE user_id = ?', (user_id,))
+            cursor.execute('SELECT id, name, face_image_path, face_embedding FROM persons WHERE user_id = ?', (user_id,))
             persons = cursor.fetchall()
             conn.close()
             
             if not persons:
                 return [], "No enrolled persons in your organization"
-            
-            # Parse embeddings from JSON
-            enrolled_embeddings = []
-            for person_id, name, embedding_str in persons:
-                try:
-                    embedding = json.loads(embedding_str)
-                    enrolled_embeddings.append((person_id, name, np.array(embedding)))
-                except:
-                    continue
-            
-            if not enrolled_embeddings:
-                return [], "No valid face embeddings found"
             
             # Detect faces using ONLY opencv (lightest detector)
             try:
@@ -250,7 +213,8 @@ class AttendanceSystem:
             
             # Limit to first 3 faces to avoid memory issues
             detected_faces = detected_faces[:3]
-            debug_info.append(f"Processing first {len(detected_faces)} face(s) to save memory\n")
+            if len(detected_faces) < len(DeepFace.extract_faces(img_path=image_path, detector_backend='opencv', enforce_detection=False, align=False)):
+                debug_info.append(f"Processing first {len(detected_faces)} face(s) to save memory\n")
             
             # Process each detected face
             for face_idx, detected_face in enumerate(detected_faces):
@@ -264,37 +228,35 @@ class AttendanceSystem:
                     face_img = cv2.resize(face_img, (112, 112))
                     cv2.imwrite(temp_face_path, cv2.cvtColor(face_img, cv2.COLOR_RGB2BGR))
                     
-                    # Generate embedding ONCE for this face
-                    try:
-                        detected_embedding = DeepFace.represent(
-                            img_path=temp_face_path,
-                            model_name='Facenet',
-                            detector_backend='skip',
-                            enforce_detection=False
-                        )[0]["embedding"]
-                        detected_embedding = np.array(detected_embedding)
-                    except Exception as e:
-                        debug_info.append(f"  Error generating embedding: {str(e)}")
-                        continue
-                    
                     best_match = None
                     best_distance = float('inf')
                     best_match_name = None
                     
-                    # Compare with pre-computed embeddings (MUCH faster and less memory)
-                    for person_id, name, enrolled_embedding in enrolled_embeddings:
+                    # Compare with enrolled faces using simple comparison
+                    for person_id, name, face_path, embedding_str in persons:
+                        if not os.path.exists(face_path):
+                            continue
+                        
                         try:
-                            # Calculate cosine distance manually
-                            distance = np.linalg.norm(detected_embedding - enrolled_embedding)
+                            # Use DeepFace.verify for comparison (simpler, less memory)
+                            result = DeepFace.verify(
+                                img1_path=temp_face_path,
+                                img2_path=face_path,
+                                model_name='Facenet',
+                                detector_backend='skip',
+                                enforce_detection=False
+                            )
                             
+                            distance = result['distance']
                             debug_info.append(f"  {name}: {distance:.3f}")
                             
                             if distance < best_distance:
                                 best_distance = distance
                                 best_match_name = name
-                                if distance < 10.0:  # Threshold for euclidean distance
+                                if distance < 0.45:  # Threshold for Facenet
                                     best_match = (person_id, name)
                         except Exception as e:
+                            debug_info.append(f"  {name}: Error")
                             continue
                     
                     # Report result
@@ -312,7 +274,6 @@ class AttendanceSystem:
                     
                     # Cleanup
                     del face_img
-                    del detected_embedding
                     
                 finally:
                     if os.path.exists(temp_face_path):
