@@ -5,6 +5,7 @@ import numpy as np
 from datetime import datetime, date
 import os
 import pandas as pd
+from deepface import DeepFace
 import base64
 from io import BytesIO
 from PIL import Image
@@ -16,39 +17,29 @@ from flask_limiter.util import get_remote_address
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
-import gc  # Garbage collection
+import gc
+import tempfile
 
 app = Flask(__name__)
 
-# Use persistent disk on Render, fallback to local for development
-DATA_DIR = os.environ.get('RENDER') and '/opt/render/project/data' or '.'
+# Use temp directory for free tier (no persistent disk)
+DATA_DIR = tempfile.gettempdir()
 os.makedirs(DATA_DIR, exist_ok=True)
 
-# Security: Generate or load secret key
-SECRET_KEY_FILE = os.path.join(DATA_DIR, 'secret.key')
-if os.path.exists(SECRET_KEY_FILE):
-    with open(SECRET_KEY_FILE, 'r') as f:
-        app.config['SECRET_KEY'] = f.read().strip()
-else:
-    app.config['SECRET_KEY'] = secrets.token_hex(32)
-    with open(SECRET_KEY_FILE, 'w') as f:
-        f.write(app.config['SECRET_KEY'])
+# Security: Generate secret key (will reset on restart, but that's OK for free tier)
+app.config['SECRET_KEY'] = secrets.token_hex(32)
 
-# Encryption key for face data
-ENCRYPTION_KEY_FILE = os.path.join(DATA_DIR, 'encryption.key')
-if os.path.exists(ENCRYPTION_KEY_FILE):
-    with open(ENCRYPTION_KEY_FILE, 'rb') as f:
-        encryption_key = f.read()
-else:
-    encryption_key = Fernet.generate_key()
-    with open(ENCRYPTION_KEY_FILE, 'wb') as f:
-        f.write(encryption_key)
-
+# Encryption key for face data (will reset on restart)
+encryption_key = Fernet.generate_key()
 cipher_suite = Fernet(encryption_key)
 
 app.config['UPLOAD_FOLDER'] = os.path.join(DATA_DIR, 'uploads')
 app.config['FACES_DIR'] = os.path.join(DATA_DIR, 'registered_faces')
-app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB max
+app.config['MAX_CONTENT_LENGTH'] = 20 * 1024 * 1024  # 20MB max
+
+# Session configuration (in-memory, will reset on restart)
+app.config['SESSION_TYPE'] = 'filesystem'
+app.config['SESSION_PERMANENT'] = False
 
 # HTTPS redirect for production
 @app.before_request
@@ -72,41 +63,46 @@ limiter = Limiter(
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 os.makedirs(app.config['FACES_DIR'], exist_ok=True)
 
-def encrypt_file(file_path):
-    """Encrypt a file and return encrypted data"""
-    try:
-        with open(file_path, 'rb') as f:
-            file_data = f.read()
-        encrypted_data = cipher_suite.encrypt(file_data)
-        return encrypted_data
-    except Exception as e:
-        print(f"Encryption error: {e}")
-        return None
+# Global model cache to prevent reloading
+_model_cache = {}
 
-def decrypt_file(encrypted_data, output_path):
-    """Decrypt data and save to file"""
-    try:
-        decrypted_data = cipher_suite.decrypt(encrypted_data)
-        with open(output_path, 'wb') as f:
-            f.write(decrypted_data)
-        return True
-    except Exception as e:
-        print(f"Decryption error: {e}")
-        return False
+def get_model():
+    """Get or initialize the DeepFace model"""
+    global _model_cache
+    if 'facenet' not in _model_cache:
+        try:
+            # Pre-load the model by doing a dummy operation
+            dummy = np.zeros((160, 160, 3), dtype=np.uint8)
+            temp_path = os.path.join(DATA_DIR, 'init.jpg')
+            cv2.imwrite(temp_path, dummy)
+            try:
+                DeepFace.represent(
+                    img_path=temp_path,
+                    model_name='Facenet',
+                    detector_backend='skip',
+                    enforce_detection=False
+                )
+                _model_cache['facenet'] = True
+            finally:
+                if os.path.exists(temp_path):
+                    os.remove(temp_path)
+        except Exception as e:
+            print(f"Model init warning: {e}")
+    return _model_cache.get('facenet', False)
 
 class AttendanceSystem:
     def __init__(self):
         self.db_name = os.path.join(DATA_DIR, "attendance.db")
         self.faces_dir = app.config['FACES_DIR']
-        self.encrypted_faces_dir = os.path.join(self.faces_dir, 'encrypted')
-        os.makedirs(self.encrypted_faces_dir, exist_ok=True)
         self.init_database()
+        # Pre-warm the model
+        get_model()
     
     def init_database(self):
         conn = sqlite3.connect(self.db_name)
         cursor = conn.cursor()
         
-        # Users table for authentication
+        # Users table
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -118,14 +114,13 @@ class AttendanceSystem:
             )
         ''')
         
-        # Persons table with user_id for data isolation
+        # Persons table with user_id
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS persons (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id INTEGER NOT NULL,
                 name TEXT NOT NULL,
                 face_image_path TEXT,
-                encrypted_face_path TEXT,
                 enrollment_date TEXT,
                 FOREIGN KEY (user_id) REFERENCES users(id),
                 UNIQUE(user_id, name)
@@ -152,15 +147,18 @@ class AttendanceSystem:
             if img is None:
                 return False, "Could not read image file"
             
-            # Use OpenCV's face detector (no heavy models needed)
-            face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
-            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-            faces = face_cascade.detectMultiScale(gray, 1.3, 5)
+            # Detect faces
+            face_objs = DeepFace.extract_faces(
+                img_path=image_path,
+                detector_backend='opencv',
+                enforce_detection=True,
+                align=False
+            )
             
-            if len(faces) == 0:
+            if len(face_objs) == 0:
                 return False, "No face detected in the image"
             
-            if len(faces) > 1:
+            if len(face_objs) > 1:
                 return False, "Multiple faces detected. Please use an image with only one face"
             
             conn = sqlite3.connect(self.db_name)
@@ -174,167 +172,28 @@ class AttendanceSystem:
                 
                 person_id = cursor.lastrowid
                 
-                # Save face image (in user-specific folder)
-                user_faces_dir = os.path.join(self.faces_dir, f"user_{user_id}")
-                os.makedirs(user_faces_dir, exist_ok=True)
-                
-                # Extract and save face region
-                x, y, w, h = faces[0]
-                face_roi = img[y:y+h, x:x+w]
-                face_resized = cv2.resize(face_roi, (200, 200))
-                
-                dest_path = os.path.join(user_faces_dir, f"{person_id}.jpg")
-                cv2.imwrite(dest_path, face_resized)
-                
-                # Encrypt the face image
-                encrypted_path = os.path.join(self.encrypted_faces_dir, f"user_{user_id}_{person_id}.enc")
-                encrypted_data = encrypt_file(dest_path)
-                
-                if encrypted_data:
-                    with open(encrypted_path, 'wb') as f:
-                        f.write(encrypted_data)
-                
-                cursor.execute('''
-                    UPDATE persons SET face_image_path = ?, encrypted_face_path = ? WHERE id = ?
-                ''', (dest_path, encrypted_path, person_id))
-                
-                conn.commit()
-                return True, "Person enrolled successfully"
-                
-            except sqlite3.IntegrityError:
-                return False, "Name already exists in your organization"
-            finally:
-                conn.close()
-                
-        except Exception as e:
-            return False, f"Error: {str(e)}"
-    
-    def recognize_faces_in_image(self, image_path, user_id):
-        try:
-            conn = sqlite3.connect(self.db_name)
-            cursor = conn.cursor()
-            cursor.execute('SELECT id, name, face_image_path FROM persons WHERE user_id = ?', (user_id,))
-            persons = cursor.fetchall()
-            conn.close()
-            
-            if not persons:
-                return [], "No enrolled persons in your organization"
-            
-            # Load test image
-            img = cv2.imread(image_path)
-            if img is None:
-                return [], "Could not read image file"
-            
-            # Detect faces using OpenCV (lightweight, no model download)
-            face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
-            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-            detected_faces = face_cascade.detectMultiScale(gray, 1.3, 5)
-            
-            if len(detected_faces) == 0:
-                return [], "No faces detected in image"
-            
-            recognized_persons = []
-            debug_info = [f"Detector: opencv-haar | Faces found: {len(detected_faces)}\n"]
-            
-            # Create ORB descriptor for feature matching
-            orb = cv2.ORB_create()
-            bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
-            
-            for face_idx, (x, y, w, h) in enumerate(detected_faces):
-                debug_info.append(f"--- Face {face_idx+1} ---")
-                
-                # Extract face region
-                face_roi = img[y:y+h, x:x+w]
-                face_resized = cv2.resize(face_roi, (200, 200))
-                face_gray = cv2.cvtColor(face_resized, cv2.COLOR_BGR2GRAY)
-                
-                # Get keypoints and descriptors
-                kp1, des1 = orb.detectAndCompute(face_gray, None)
-                
-                if des1 is None:
-                    debug_info.append("  ✗ No features detected")
-                    continue
-                
-                best_match = None
-                best_match_count = 0
-                
-                for person_id, name, face_path in persons:
-                    if not os.path.exists(face_path):
-                        continue
-                    
-                    try:
-                        # Load stored face
-                        stored_face = cv2.imread(face_path, cv2.IMREAD_GRAYSCALE)
-                        if stored_face is None:
-                            continue
-                        
-                        # Get keypoints and descriptors
-                        kp2, des2 = orb.detectAndCompute(stored_face, None)
-                        
-                        if des2 is None:
-                            continue
-                        
-                        # Match descriptors
-                        matches = bf.match(des1, des2)
-                        match_count = len(matches)
-                        
-                        # Calculate match quality
-                        good_matches = [m for m in matches if m.distance < 50]
-                        match_quality = len(good_matches)
-                        
-                        debug_info.append(f"  {name}: {match_quality} good matches")
-                        
-                        # Threshold: at least 15 good matches
-                        if match_quality > 15 and match_quality > best_match_count:
-                            best_match_count = match_quality
-                            best_match = (person_id, name)
-                    
-                    except Exception as e:
-                        continue
-                
-                if best_match:
-                    recognized_persons.append(best_match)
-                    debug_info.append(f"  ✓ MATCH: {best_match[1]} ({best_match_count} matches)")
-                else:
-                    debug_info.append(f"  ✗ No match (best: {best_match_count} matches)")
-                
-                debug_info.append("")
-            
-            recognized_persons = list(set(recognized_persons))
-            
-            full_debug = "\n".join(debug_info)
-            full_debug += f"\nSummary: {len(detected_faces)} detected, {len(recognized_persons)} recognized"
-            
-            return recognized_persons, full_debug
-            
-        except Exception as e:
-            return [], f"Error: {str(e)}"
-                person_id = cursor.lastrowid
-                
-                # Save unencrypted face for processing (in user-specific folder)
+                # Save face in user-specific folder
                 user_faces_dir = os.path.join(self.faces_dir, f"user_{user_id}")
                 os.makedirs(user_faces_dir, exist_ok=True)
                 
                 dest_path = os.path.join(user_faces_dir, f"{person_id}.jpg")
                 
+                # Extract and save face
                 face_img = face_objs[0]['face']
                 face_img = (face_img * 255).astype(np.uint8)
-                face_img = cv2.resize(face_img, (224, 224))
-                cv2.imwrite(dest_path, cv2.cvtColor(face_img, cv2.COLOR_RGB2BGR))
-                
-                # Encrypt the face image
-                encrypted_path = os.path.join(self.encrypted_faces_dir, f"user_{user_id}_{person_id}.enc")
-                encrypted_data = encrypt_file(dest_path)
-                
-                if encrypted_data:
-                    with open(encrypted_path, 'wb') as f:
-                        f.write(encrypted_data)
+                face_img = cv2.resize(face_img, (160, 160))  # Smaller size for memory
+                cv2.imwrite(dest_path, cv2.cvtColor(face_img, cv2.COLOR_RGB2BGR), [cv2.IMWRITE_JPEG_QUALITY, 90])
                 
                 cursor.execute('''
-                    UPDATE persons SET face_image_path = ?, encrypted_face_path = ? WHERE id = ?
-                ''', (dest_path, encrypted_path, person_id))
+                    UPDATE persons SET face_image_path = ? WHERE id = ?
+                ''', (dest_path, person_id))
                 
                 conn.commit()
+                
+                # Cleanup
+                del face_img
+                gc.collect()
+                
                 return True, "Person enrolled successfully"
                 
             except sqlite3.IntegrityError:
@@ -346,6 +205,7 @@ class AttendanceSystem:
             return False, f"Error: {str(e)}"
     
     def recognize_faces_in_image(self, image_path, user_id):
+        """Optimized recognition matching your local version's logic"""
         try:
             conn = sqlite3.connect(self.db_name)
             cursor = conn.cursor()
@@ -356,46 +216,59 @@ class AttendanceSystem:
             if not persons:
                 return [], "No enrolled persons in your organization"
             
-            # Use only OpenCV detector (fastest and lightest)
-            try:
-                detected_faces = DeepFace.extract_faces(
-                    img_path=image_path,
-                    detector_backend='opencv',
-                    enforce_detection=False,
-                    align=False
-                )
-            except Exception as e:
-                return [], f"Face detection failed: {str(e)}"
+            # Try multiple backends like your local version
+            detected_faces = None
+            backend_used = None
+            backends = ['opencv', 'ssd']  # Use lighter backends for Render
+            
+            for backend in backends:
+                try:
+                    detected_faces = DeepFace.extract_faces(
+                        img_path=image_path,
+                        detector_backend=backend,
+                        enforce_detection=False,
+                        align=False
+                    )
+                    if detected_faces and len(detected_faces) > 0:
+                        backend_used = backend
+                        break
+                except Exception as e:
+                    continue
             
             if not detected_faces or len(detected_faces) == 0:
-                return [], "No faces detected in image"
+                return [], "No faces detected in image. Try a clearer photo with better lighting."
             
             recognized_persons = []
-            debug_info = [f"Detector: opencv | Faces found: {len(detected_faces)}\n"]
+            unrecognized_faces = 0
+            debug_info = [f"Using {backend_used} detector - Found {len(detected_faces)} face(s)\n"]
             
+            # Process each detected face
             for face_idx, detected_face in enumerate(detected_faces):
                 debug_info.append(f"--- Face {face_idx+1} ---")
                 
-                temp_face_path = f"temp_face_{face_idx}.jpg"
+                temp_face_path = os.path.join(DATA_DIR, f'temp_face_{face_idx}_{os.getpid()}.jpg')
                 try:
+                    # Save detected face
                     face_img = detected_face['face']
                     face_img = (face_img * 255).astype(np.uint8)
-                    face_img = cv2.resize(face_img, (224, 224))
+                    face_img = cv2.resize(face_img, (160, 160))
                     cv2.imwrite(temp_face_path, cv2.cvtColor(face_img, cv2.COLOR_RGB2BGR))
                     
                     best_match = None
                     best_distance = float('inf')
+                    best_match_name = None
                     
+                    # Compare with all enrolled persons
                     for person_id, name, face_path in persons:
                         if not os.path.exists(face_path):
                             continue
                         
                         try:
-                            # Use Facenet (lighter than Facenet512)
+                            # Use verify like your local version
                             result = DeepFace.verify(
                                 img1_path=temp_face_path,
                                 img2_path=face_path,
-                                model_name='Facenet',  # Changed from Facenet512
+                                model_name='Facenet',
                                 detector_backend='skip',
                                 enforce_detection=False
                             )
@@ -405,33 +278,52 @@ class AttendanceSystem:
                             
                             if distance < best_distance:
                                 best_distance = distance
-                                if distance < 0.4:  # Adjusted threshold for Facenet
+                                best_match_name = name
+                                if distance < 0.45:  # Threshold for Facenet
                                     best_match = (person_id, name)
-                                    
+                            
                         except Exception as e:
+                            debug_info.append(f"  {name}: Error")
                             continue
                     
+                    # Report result
                     if best_match:
                         recognized_persons.append(best_match)
                         debug_info.append(f"  ✓ MATCH: {best_match[1]} ({best_distance:.3f})")
                     else:
-                        debug_info.append(f"  ✗ No match ({best_distance:.3f})")
+                        unrecognized_faces += 1
+                        if best_match_name:
+                            debug_info.append(f"  ✗ Closest: {best_match_name} ({best_distance:.3f} - too high)")
+                        else:
+                            debug_info.append(f"  ✗ No match")
                     
                     debug_info.append("")
                     
+                    # Cleanup
+                    del face_img
+                    
                 finally:
                     if os.path.exists(temp_face_path):
-                        os.remove(temp_face_path)
+                        try:
+                            os.remove(temp_face_path)
+                        except:
+                            pass
+                
+                # Force GC after each face
+                gc.collect()
             
+            # Remove duplicates
             recognized_persons = list(set(recognized_persons))
             
             full_debug = "\n".join(debug_info)
-            full_debug += f"\nSummary: {len(detected_faces)} detected, {len(recognized_persons)} recognized"
+            full_debug += f"\nSummary: {len(detected_faces)} face(s) detected, {len(recognized_persons)} recognized, {unrecognized_faces} unrecognized"
             
             return recognized_persons, full_debug
             
         except Exception as e:
             return [], f"Error: {str(e)}"
+        finally:
+            gc.collect()
     
     def mark_attendance(self, person_ids):
         conn = sqlite3.connect(self.db_name)
@@ -548,19 +440,17 @@ def login_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
-# Landing page
+# Routes
 @app.route('/')
 def landing():
     return render_template('landing.html')
 
-# Login page
 @app.route('/login')
 def login_page():
     if 'user_id' in session:
         return redirect('/dashboard')
     return render_template('login.html')
 
-# Dashboard (main app)
 @app.route('/dashboard')
 def dashboard():
     if 'user_id' not in session:
@@ -655,11 +545,11 @@ def get_user():
         'organization': session.get('organization')
     })
 
-# Attendance routes
 @app.route('/api/enroll', methods=['POST'])
 @limiter.limit("10 per hour")
 @login_required
 def enroll():
+    temp_path = None
     try:
         name = request.form.get('name')
         image_data = request.form.get('image')
@@ -670,20 +560,24 @@ def enroll():
         image_data = image_data.split(',')[1]
         image_bytes = base64.b64decode(image_data)
         
-        temp_path = os.path.join(app.config['UPLOAD_FOLDER'], 'temp_enroll.jpg')
+        temp_path = os.path.join(app.config['UPLOAD_FOLDER'], f'temp_enroll_{os.getpid()}.jpg')
         with open(temp_path, 'wb') as f:
             f.write(image_bytes)
         
         user_id = session.get('user_id')
         success, message = system.enroll_person(name, temp_path, user_id)
         
-        if os.path.exists(temp_path):
-            os.remove(temp_path)
-        
         return jsonify({'success': success, 'message': message})
         
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)})
+    finally:
+        if temp_path and os.path.exists(temp_path):
+            try:
+                os.remove(temp_path)
+            except:
+                pass
+        gc.collect()
 
 @app.route('/api/mark-attendance', methods=['POST'])
 @limiter.limit("30 per hour")
@@ -696,71 +590,24 @@ def mark_attendance():
         if not image_data:
             return jsonify({'success': False, 'message': 'Image required', 'debug': 'No image data received'})
         
-        # Decode image - limit size to prevent memory issues
         try:
-            # Split and get base64 data
-            if ',' in image_data:
-                image_data = image_data.split(',')[1]
-            
-            # Check base64 size (rough estimate: 4/3 of actual size)
-            estimated_size = len(image_data) * 3 / 4
-            if estimated_size > 5 * 1024 * 1024:  # 5MB limit
-                return jsonify({
-                    'success': False, 
-                    'message': 'Image too large (max 5MB)',
-                    'debug': f'Estimated size: {estimated_size/1024/1024:.1f}MB'
-                })
-            
+            image_data = image_data.split(',')[1]
             image_bytes = base64.b64decode(image_data)
-            
-            # Clear the base64 string from memory immediately
-            del image_data
-            gc.collect()
-            
         except Exception as e:
             return jsonify({'success': False, 'message': 'Invalid image data', 'debug': str(e)})
         
-        # Convert to PIL Image and resize to max 800x800 to save memory
+        temp_path = os.path.join(app.config['UPLOAD_FOLDER'], f'temp_attendance_{os.getpid()}.jpg')
         try:
-            pil_image = Image.open(BytesIO(image_bytes))
-            
-            # Resize if too large
-            max_size = 800
-            if pil_image.width > max_size or pil_image.height > max_size:
-                ratio = min(max_size / pil_image.width, max_size / pil_image.height)
-                new_size = (int(pil_image.width * ratio), int(pil_image.height * ratio))
-                pil_image = pil_image.resize(new_size, Image.Resampling.LANCZOS)
-            
-            # Convert to RGB if needed
-            if pil_image.mode != 'RGB':
-                pil_image = pil_image.convert('RGB')
-            
-            # Clear original bytes from memory
-            del image_bytes
-            gc.collect()
-            
-        except Exception as e:
-            return jsonify({'success': False, 'message': 'Invalid image format', 'debug': str(e)})
-        
-        # Save temporary file
-        temp_path = os.path.join(app.config['UPLOAD_FOLDER'], f'temp_att_{datetime.now().timestamp()}.jpg')
-        try:
-            pil_image.save(temp_path, 'JPEG', quality=85, optimize=True)
-            
-            # Clear PIL image from memory
-            del pil_image
-            gc.collect()
-            
+            with open(temp_path, 'wb') as f:
+                f.write(image_bytes)
         except Exception as e:
             return jsonify({'success': False, 'message': 'Failed to save image', 'debug': str(e)})
         
-        # Verify file exists
         if not os.path.exists(temp_path):
             return jsonify({'success': False, 'message': 'Image file not found', 'debug': 'File save failed'})
         
         user_id = session.get('user_id')
         
-        # Recognize faces
         try:
             recognized_persons, debug_info = system.recognize_faces_in_image(temp_path, user_id)
         except Exception as e:
@@ -777,7 +624,6 @@ def mark_attendance():
                 'debug': debug_info
             })
         
-        # Mark attendance
         try:
             marked, already_marked = system.mark_attendance([p[0] for p in recognized_persons])
         except Exception as e:
@@ -802,13 +648,11 @@ def mark_attendance():
             'debug': f'Unexpected error: {str(e)}'
         })
     finally:
-        # Always cleanup
         if temp_path and os.path.exists(temp_path):
             try:
                 os.remove(temp_path)
             except:
                 pass
-        # Force garbage collection
         gc.collect()
 
 @app.route('/api/persons')
