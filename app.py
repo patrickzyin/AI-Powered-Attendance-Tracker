@@ -63,40 +63,12 @@ limiter = Limiter(
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 os.makedirs(app.config['FACES_DIR'], exist_ok=True)
 
-# Global model cache to prevent reloading
-_model_cache = {}
-
-def get_model():
-    """Get or initialize the DeepFace model"""
-    global _model_cache
-    if 'facenet' not in _model_cache:
-        try:
-            # Pre-load the model by doing a dummy operation
-            dummy = np.zeros((160, 160, 3), dtype=np.uint8)
-            temp_path = os.path.join(DATA_DIR, 'init.jpg')
-            cv2.imwrite(temp_path, dummy)
-            try:
-                DeepFace.represent(
-                    img_path=temp_path,
-                    model_name='Facenet',
-                    detector_backend='skip',
-                    enforce_detection=False
-                )
-                _model_cache['facenet'] = True
-            finally:
-                if os.path.exists(temp_path):
-                    os.remove(temp_path)
-        except Exception as e:
-            print(f"Model init warning: {e}")
-    return _model_cache.get('facenet', False)
-
 class AttendanceSystem:
     def __init__(self):
         self.db_name = os.path.join(DATA_DIR, "attendance.db")
         self.faces_dir = app.config['FACES_DIR']
         self.init_database()
-        # Pre-warm the model
-        get_model()
+        # DO NOT pre-load models - let them load on first use
     
     def init_database(self):
         conn = sqlite3.connect(self.db_name)
@@ -147,7 +119,7 @@ class AttendanceSystem:
             if img is None:
                 return False, "Could not read image file"
             
-            # Detect faces
+            # Detect faces - this will load model on first use
             face_objs = DeepFace.extract_faces(
                 img_path=image_path,
                 detector_backend='opencv',
@@ -181,7 +153,7 @@ class AttendanceSystem:
                 # Extract and save face
                 face_img = face_objs[0]['face']
                 face_img = (face_img * 255).astype(np.uint8)
-                face_img = cv2.resize(face_img, (160, 160))  # Smaller size for memory
+                face_img = cv2.resize(face_img, (160, 160))
                 cv2.imwrite(dest_path, cv2.cvtColor(face_img, cv2.COLOR_RGB2BGR), [cv2.IMWRITE_JPEG_QUALITY, 90])
                 
                 cursor.execute('''
@@ -192,6 +164,7 @@ class AttendanceSystem:
                 
                 # Cleanup
                 del face_img
+                del face_objs
                 gc.collect()
                 
                 return True, "Person enrolled successfully"
@@ -203,6 +176,9 @@ class AttendanceSystem:
                 
         except Exception as e:
             return False, f"Error: {str(e)}"
+        finally:
+            # Force cleanup after enrollment
+            gc.collect()
     
     def recognize_faces_in_image(self, image_path, user_id):
         """Optimized recognition matching your local version's logic"""
@@ -219,7 +195,7 @@ class AttendanceSystem:
             # Try multiple backends like your local version
             detected_faces = None
             backend_used = None
-            backends = ['opencv', 'ssd']  # Use lighter backends for Render
+            backends = ['opencv', 'ssd']
             
             for backend in backends:
                 try:
@@ -279,7 +255,7 @@ class AttendanceSystem:
                             if distance < best_distance:
                                 best_distance = distance
                                 best_match_name = name
-                                if distance < 0.45:  # Threshold for Facenet
+                                if distance < 0.45:
                                     best_match = (person_id, name)
                             
                         except Exception as e:
