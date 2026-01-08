@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify, send_file, Response, redirect, session, url_for
+from flask import Flask, render_template, request, jsonify, send_file, redirect, session, url_for
 import cv2
 import sqlite3
 import numpy as np
@@ -8,64 +8,29 @@ import pandas as pd
 from deepface import DeepFace
 import base64
 from io import BytesIO
-from PIL import Image
-import json
 import secrets
-from cryptography.fernet import Fernet
-from flask_limiter import Limiter
-from flask_limiter.util import get_remote_address
-from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
 import gc
-import tempfile
+import re
 
 app = Flask(__name__)
-
-# Use temp directory for free tier (no persistent disk)
-DATA_DIR = tempfile.gettempdir()
-os.makedirs(DATA_DIR, exist_ok=True)
-
-# Security: Generate secret key (will reset on restart, but that's OK for free tier)
 app.config['SECRET_KEY'] = secrets.token_hex(32)
+app.config['UPLOAD_FOLDER'] = 'uploads'
+app.config['FACES_DIR'] = 'registered_faces'
+app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB
 
-# Encryption key for face data (will reset on restart)
-encryption_key = Fernet.generate_key()
-cipher_suite = Fernet(encryption_key)
-
-app.config['UPLOAD_FOLDER'] = os.path.join(DATA_DIR, 'uploads')
-app.config['FACES_DIR'] = os.path.join(DATA_DIR, 'registered_faces')
-app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024  # Reduced to 10MB
-
-# Session configuration (in-memory, will reset on restart)
-app.config['SESSION_TYPE'] = 'filesystem'
-app.config['SESSION_PERMANENT'] = False
-
-# HTTPS redirect for production
-@app.before_request
-def before_request_handler():
-    if not request.is_secure and os.environ.get('FLASK_ENV') == 'production':
-        url = request.url.replace('http://', 'https://', 1)
-        return redirect(url, code=301)
-
-# ProxyFix for Render
-app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
-
-# Rate limiting
-limiter = Limiter(
-    app=app,
-    key_func=get_remote_address,
-    default_limits=["200 per day", "50 per hour"],
-    storage_uri="memory://"
-)
-
-# Ensure directories exist
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 os.makedirs(app.config['FACES_DIR'], exist_ok=True)
 
+def is_valid_email(email):
+    """Validate email format"""
+    pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    return re.match(pattern, email) is not None
+
 class AttendanceSystem:
     def __init__(self):
-        self.db_name = os.path.join(DATA_DIR, "attendance.db")
+        self.db_name = "attendance.db"
         self.faces_dir = app.config['FACES_DIR']
         self.init_database()
     
@@ -85,14 +50,13 @@ class AttendanceSystem:
             )
         ''')
         
-        # Persons table with user_id AND face embeddings stored
+        # Persons table with user_id for data isolation
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS persons (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id INTEGER NOT NULL,
                 name TEXT NOT NULL,
                 face_image_path TEXT,
-                face_embedding TEXT,
                 enrollment_date TEXT,
                 FOREIGN KEY (user_id) REFERENCES users(id),
                 UNIQUE(user_id, name)
@@ -114,19 +78,28 @@ class AttendanceSystem:
         conn.close()
     
     def enroll_person(self, name, image_path, user_id):
-        """Enroll person - just save face, generate embedding later on first recognition"""
+        """Enroll person - optimized for accuracy"""
         try:
             img = cv2.imread(image_path)
             if img is None:
                 return False, "Could not read image file"
             
-            # Detect faces
-            face_objs = DeepFace.extract_faces(
-                img_path=image_path,
-                detector_backend='opencv',
-                enforce_detection=True,
-                align=False
-            )
+            # Use best detector for accuracy
+            try:
+                face_objs = DeepFace.extract_faces(
+                    img_path=image_path,
+                    detector_backend='retinaface',
+                    enforce_detection=True,
+                    align=True
+                )
+            except:
+                # Fallback to opencv
+                face_objs = DeepFace.extract_faces(
+                    img_path=image_path,
+                    detector_backend='opencv',
+                    enforce_detection=True,
+                    align=True
+                )
             
             if len(face_objs) == 0:
                 return False, "No face detected in the image"
@@ -151,11 +124,12 @@ class AttendanceSystem:
                 
                 dest_path = os.path.join(user_faces_dir, f"{person_id}.jpg")
                 
-                # Extract and save face
+                # Save high-quality face
                 face_img = face_objs[0]['face']
                 face_img = (face_img * 255).astype(np.uint8)
-                face_img = cv2.resize(face_img, (112, 112))
-                cv2.imwrite(dest_path, cv2.cvtColor(face_img, cv2.COLOR_RGB2BGR), [cv2.IMWRITE_JPEG_QUALITY, 85])
+                face_img = cv2.resize(face_img, (224, 224))
+                cv2.imwrite(dest_path, cv2.cvtColor(face_img, cv2.COLOR_RGB2BGR), 
+                           [cv2.IMWRITE_JPEG_QUALITY, 95])
                 
                 cursor.execute('''
                     UPDATE persons SET face_image_path = ? WHERE id = ?
@@ -163,7 +137,6 @@ class AttendanceSystem:
                 
                 conn.commit()
                 
-                # Cleanup
                 del face_img
                 del face_objs
                 gc.collect()
@@ -181,70 +154,71 @@ class AttendanceSystem:
             gc.collect()
     
     def recognize_faces_in_image(self, image_path, user_id):
-        """Generate embeddings on-the-fly for lazy loading"""
+        """Recognize faces - optimized for accuracy"""
         try:
-            # Get enrolled persons (may not have embeddings yet)
             conn = sqlite3.connect(self.db_name)
             cursor = conn.cursor()
-            cursor.execute('SELECT id, name, face_image_path, face_embedding FROM persons WHERE user_id = ?', (user_id,))
+            cursor.execute('SELECT id, name, face_image_path FROM persons WHERE user_id = ?', (user_id,))
             persons = cursor.fetchall()
             conn.close()
             
             if not persons:
                 return [], "No enrolled persons in your organization"
             
-            # Detect faces using ONLY opencv (lightest detector)
-            try:
-                detected_faces = DeepFace.extract_faces(
-                    img_path=image_path,
-                    detector_backend='opencv',
-                    enforce_detection=False,
-                    align=False
-                )
-            except Exception as e:
-                return [], f"Face detection failed: {str(e)}"
+            # Try multiple detectors
+            detected_faces = None
+            backend_used = None
+            backends = ['retinaface', 'mtcnn', 'opencv', 'ssd']
+            
+            for backend in backends:
+                try:
+                    detected_faces = DeepFace.extract_faces(
+                        img_path=image_path,
+                        detector_backend=backend,
+                        enforce_detection=False,
+                        align=True
+                    )
+                    if detected_faces and len(detected_faces) > 0:
+                        backend_used = backend
+                        break
+                except Exception as e:
+                    continue
             
             if not detected_faces or len(detected_faces) == 0:
                 return [], "No faces detected in image. Try a clearer photo with better lighting."
             
             recognized_persons = []
             unrecognized_faces = 0
-            debug_info = [f"Using opencv detector - Found {len(detected_faces)} face(s)\n"]
+            debug_info = [f"Using {backend_used} detector - Found {len(detected_faces)} face(s)\n"]
             
-            # Limit to first 3 faces to avoid memory issues
-            detected_faces = detected_faces[:3]
-            if len(detected_faces) < len(DeepFace.extract_faces(img_path=image_path, detector_backend='opencv', enforce_detection=False, align=False)):
-                debug_info.append(f"Processing first {len(detected_faces)} face(s) to save memory\n")
-            
-            # Process each detected face
+            # Process all faces
             for face_idx, detected_face in enumerate(detected_faces):
                 debug_info.append(f"--- Face {face_idx+1} ---")
                 
-                temp_face_path = os.path.join(DATA_DIR, f'temp_face_{os.getpid()}.jpg')
+                temp_face_path = f'temp_face_{face_idx}_{os.getpid()}.jpg'
                 try:
-                    # Save detected face
                     face_img = detected_face['face']
                     face_img = (face_img * 255).astype(np.uint8)
-                    face_img = cv2.resize(face_img, (112, 112))
+                    face_img = cv2.resize(face_img, (224, 224))
                     cv2.imwrite(temp_face_path, cv2.cvtColor(face_img, cv2.COLOR_RGB2BGR))
                     
                     best_match = None
                     best_distance = float('inf')
                     best_match_name = None
                     
-                    # Compare with enrolled faces using simple comparison
-                    for person_id, name, face_path, embedding_str in persons:
+                    # Compare with enrolled persons
+                    for person_id, name, face_path in persons:
                         if not os.path.exists(face_path):
                             continue
                         
                         try:
-                            # Use DeepFace.verify for comparison (simpler, less memory)
                             result = DeepFace.verify(
                                 img1_path=temp_face_path,
                                 img2_path=face_path,
-                                model_name='Facenet',
+                                model_name='Facenet512',
                                 detector_backend='skip',
-                                enforce_detection=False
+                                enforce_detection=False,
+                                distance_metric='cosine'
                             )
                             
                             distance = result['distance']
@@ -253,13 +227,12 @@ class AttendanceSystem:
                             if distance < best_distance:
                                 best_distance = distance
                                 best_match_name = name
-                                if distance < 0.45:  # Threshold for Facenet
+                                if distance < 0.40:
                                     best_match = (person_id, name)
                         except Exception as e:
                             debug_info.append(f"  {name}: Error")
                             continue
                     
-                    # Report result
                     if best_match:
                         recognized_persons.append(best_match)
                         debug_info.append(f"  ✓ MATCH: {best_match[1]} ({best_distance:.3f})")
@@ -271,8 +244,6 @@ class AttendanceSystem:
                             debug_info.append(f"  ✗ No match")
                     
                     debug_info.append("")
-                    
-                    # Cleanup
                     del face_img
                     
                 finally:
@@ -282,14 +253,12 @@ class AttendanceSystem:
                         except:
                             pass
                 
-                # Force GC after each face
                 gc.collect()
             
-            # Remove duplicates
             recognized_persons = list(set(recognized_persons))
             
             full_debug = "\n".join(debug_info)
-            full_debug += f"\nSummary: {len(detected_faces)} face(s) detected, {len(recognized_persons)} recognized, {unrecognized_faces} unrecognized"
+            full_debug += f"\n{'='*50}\nSummary: {len(detected_faces)} face(s) detected, {len(recognized_persons)} recognized, {unrecognized_faces} unrecognized"
             
             return recognized_persons, full_debug
             
@@ -409,13 +378,15 @@ def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if 'user_id' not in session:
-            return jsonify({'success': False, 'message': 'Please log in', 'redirect': '/login'}), 401
+            return jsonify({'success': False, 'message': 'Please log in'}), 401
         return f(*args, **kwargs)
     return decorated_function
 
 # Routes
 @app.route('/')
 def landing():
+    if 'user_id' in session:
+        return redirect('/dashboard')
     return render_template('landing.html')
 
 @app.route('/login')
@@ -432,11 +403,10 @@ def dashboard():
 
 # Authentication routes
 @app.route('/api/login', methods=['POST'])
-@limiter.limit("5 per minute")
 def login():
     data = request.json
-    username = data.get('username')
-    password = data.get('password')
+    username = data.get('username', '').strip()
+    password = data.get('password', '')
     
     if not username or not password:
         return jsonify({'success': False, 'message': 'Username and password required'})
@@ -453,6 +423,7 @@ def login():
             session['user_id'] = user[0]
             session['username'] = user[2]
             session['organization'] = user[3]
+            session.permanent = True
             return jsonify({'success': True, 'message': 'Login successful'})
         
         return jsonify({'success': False, 'message': 'Invalid username or password'})
@@ -461,23 +432,48 @@ def login():
         return jsonify({'success': False, 'message': str(e)})
 
 @app.route('/api/register', methods=['POST'])
-@limiter.limit("3 per hour")
 def register():
     data = request.json
-    username = data.get('username')
-    email = data.get('email')
-    password = data.get('password')
-    organization = data.get('organization', '')
+    username = data.get('username', '').strip()
+    email = data.get('email', '').strip()
+    password = data.get('password', '')
+    organization = data.get('organization', '').strip()
     
+    # Validation
     if not username or not email or not password:
-        return jsonify({'success': False, 'message': 'All fields required'})
+        return jsonify({'success': False, 'message': 'All required fields must be filled'})
+    
+    if len(username) < 3:
+        return jsonify({'success': False, 'message': 'Username must be at least 3 characters'})
+    
+    if not is_valid_email(email):
+        return jsonify({'success': False, 'message': 'Please enter a valid email address (e.g., user@example.com)'})
     
     if len(password) < 8:
         return jsonify({'success': False, 'message': 'Password must be at least 8 characters'})
     
+    # Check password strength
+    if not any(c.isupper() for c in password):
+        return jsonify({'success': False, 'message': 'Password must contain at least one uppercase letter'})
+    
+    if not any(c.isdigit() for c in password):
+        return jsonify({'success': False, 'message': 'Password must contain at least one number'})
+    
     try:
         conn = sqlite3.connect(system.db_name)
         cursor = conn.cursor()
+        
+        # Check if username exists
+        cursor.execute('SELECT id FROM users WHERE username = ?', (username,))
+        if cursor.fetchone():
+            conn.close()
+            return jsonify({'success': False, 'message': 'Username already taken'})
+        
+        # Check if email exists
+        cursor.execute('SELECT id FROM users WHERE email = ?', (email,))
+        if cursor.fetchone():
+            conn.close()
+            return jsonify({'success': False, 'message': 'Email already registered'})
         
         password_hash = generate_password_hash(password)
         
@@ -493,17 +489,12 @@ def register():
         session['user_id'] = user_id
         session['username'] = username
         session['organization'] = organization
+        session.permanent = True
         
         return jsonify({'success': True, 'message': 'Registration successful'})
         
-    except sqlite3.IntegrityError as e:
-        if 'username' in str(e):
-            return jsonify({'success': False, 'message': 'Username already exists'})
-        elif 'email' in str(e):
-            return jsonify({'success': False, 'message': 'Email already exists'})
-        return jsonify({'success': False, 'message': 'Registration failed'})
     except Exception as e:
-        return jsonify({'success': False, 'message': str(e)})
+        return jsonify({'success': False, 'message': f'Registration failed: {str(e)}'})
 
 @app.route('/api/logout', methods=['POST'])
 def logout():
@@ -518,8 +509,8 @@ def get_user():
         'organization': session.get('organization')
     })
 
+# Attendance routes
 @app.route('/api/enroll', methods=['POST'])
-@limiter.limit("10 per hour")
 @login_required
 def enroll():
     temp_path = None
@@ -553,7 +544,6 @@ def enroll():
         gc.collect()
 
 @app.route('/api/mark-attendance', methods=['POST'])
-@limiter.limit("30 per hour")
 @login_required
 def mark_attendance():
     temp_path = None
@@ -561,34 +551,21 @@ def mark_attendance():
         image_data = request.form.get('image')
         
         if not image_data:
-            return jsonify({'success': False, 'message': 'Image required', 'debug': 'No image data received'})
+            return jsonify({'success': False, 'message': 'Image required'})
         
         try:
             image_data = image_data.split(',')[1]
             image_bytes = base64.b64decode(image_data)
         except Exception as e:
-            return jsonify({'success': False, 'message': 'Invalid image data', 'debug': str(e)})
+            return jsonify({'success': False, 'message': 'Invalid image data'})
         
         temp_path = os.path.join(app.config['UPLOAD_FOLDER'], f'temp_attendance_{os.getpid()}.jpg')
-        try:
-            with open(temp_path, 'wb') as f:
-                f.write(image_bytes)
-        except Exception as e:
-            return jsonify({'success': False, 'message': 'Failed to save image', 'debug': str(e)})
-        
-        if not os.path.exists(temp_path):
-            return jsonify({'success': False, 'message': 'Image file not found', 'debug': 'File save failed'})
+        with open(temp_path, 'wb') as f:
+            f.write(image_bytes)
         
         user_id = session.get('user_id')
         
-        try:
-            recognized_persons, debug_info = system.recognize_faces_in_image(temp_path, user_id)
-        except Exception as e:
-            return jsonify({
-                'success': False, 
-                'message': 'Recognition failed',
-                'debug': f'Error during recognition: {str(e)}'
-            })
+        recognized_persons, debug_info = system.recognize_faces_in_image(temp_path, user_id)
         
         if not recognized_persons:
             return jsonify({
@@ -597,14 +574,7 @@ def mark_attendance():
                 'debug': debug_info
             })
         
-        try:
-            marked, already_marked = system.mark_attendance([p[0] for p in recognized_persons])
-        except Exception as e:
-            return jsonify({
-                'success': False,
-                'message': 'Failed to mark attendance',
-                'debug': f'Database error: {str(e)}'
-            })
+        marked, already_marked = system.mark_attendance([p[0] for p in recognized_persons])
         
         return jsonify({
             'success': True,
@@ -618,7 +588,7 @@ def mark_attendance():
         return jsonify({
             'success': False, 
             'message': 'Server error',
-            'debug': f'Unexpected error: {str(e)}'
+            'debug': f'Error: {str(e)}'
         })
     finally:
         if temp_path and os.path.exists(temp_path):
@@ -649,7 +619,6 @@ def get_attendance():
     })
 
 @app.route('/api/delete-person', methods=['POST'])
-@limiter.limit("20 per hour")
 @login_required
 def delete_person():
     name = request.json.get('name')
@@ -678,6 +647,16 @@ def export_csv():
     )
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    debug = os.environ.get('FLASK_ENV') != 'production'
-    app.run(debug=debug, host='0.0.0.0', port=port)
+    print("=" * 60)
+    print("🎭 AI Attendance Tracker - Multi-User Version")
+    print("=" * 60)
+    print("✓ Full authentication system")
+    print("✓ Multi-organization support")
+    print("✓ Email validation")
+    print("✓ Password strength requirements")
+    print("✓ Data isolation per user")
+    print("=" * 60)
+    print("\n🌐 Opening at: http://localhost:5000")
+    print("📝 Press CTRL+C to stop\n")
+    
+    app.run(debug=True, host='localhost', port=5000)

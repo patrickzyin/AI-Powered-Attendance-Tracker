@@ -263,6 +263,11 @@
             width: 20px;
             height: 20px;
         }
+
+        small {
+            display: block;
+            margin-top: 5px;
+        }
     </style>
 </head>
 <body>
@@ -308,21 +313,21 @@
             <div class="form-group">
                 <label for="register-username">Username</label>
                 <div class="neu-input">
-                    <input type="text" id="register-username" placeholder="Choose a username" autocomplete="username">
+                    <input type="text" id="register-username" placeholder="Choose a username (min 3 chars)" autocomplete="username">
                 </div>
             </div>
             
             <div class="form-group">
                 <label for="register-email">Email</label>
                 <div class="neu-input">
-                    <input type="email" id="register-email" placeholder="your@email.com" autocomplete="email">
+                    <input type="email" id="register-email" placeholder="your@example.com" autocomplete="email" required>
                 </div>
             </div>
             
             <div class="form-group">
                 <label for="register-password">Password</label>
                 <div class="neu-input" style="position: relative;">
-                    <input type="password" id="register-password" placeholder="At least 8 characters" autocomplete="new-password">
+                    <input type="password" id="register-password" placeholder="Min 8 chars, 1 uppercase, 1 number" autocomplete="new-password" required>
                     <button type="button" class="password-toggle" onclick="togglePassword('register-password')">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
@@ -330,6 +335,9 @@
                         </svg>
                     </button>
                 </div>
+                <small style="color: var(--text-light); font-size: 12px;">
+                    Must contain: 8+ characters, uppercase letter, number
+                </small>
             </div>
             
             <div class="form-group">
@@ -343,7 +351,7 @@
             
             <div class="privacy-note">
                 <strong>🔒 Privacy & Security</strong>
-                Your facial data is encrypted with AES-128. Only you can access your registered people. We never share your data with third parties.
+                Your facial data is encrypted and isolated. Only you can access your registered people. We never share your data with third parties.
             </div>
         </div>
         
@@ -438,8 +446,31 @@
                 return;
             }
             
+            // Client-side email validation
+            const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+            if (!emailRegex.test(email)) {
+                showAlert('Please enter a valid email address (e.g., user@example.com)', 'error');
+                return;
+            }
+            
+            if (username.length < 3) {
+                showAlert('Username must be at least 3 characters', 'error');
+                return;
+            }
+            
             if (password.length < 8) {
                 showAlert('Password must be at least 8 characters', 'error');
+                return;
+            }
+            
+            // Check password strength
+            if (!/[A-Z]/.test(password)) {
+                showAlert('Password must contain at least one uppercase letter', 'error');
+                return;
+            }
+            
+            if (!/[0-9]/.test(password)) {
+                showAlert('Password must contain at least one number', 'error');
                 return;
             }
             
