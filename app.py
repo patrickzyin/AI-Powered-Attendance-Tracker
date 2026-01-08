@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify, send_file, redirect, session, url_for
+from flask import Flask, render_template, request, jsonify, send_file, redirect, session
 import cv2
 import sqlite3
 import numpy as np
@@ -11,14 +11,24 @@ from io import BytesIO
 import secrets
 from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
-import gc
 import re
+import gc
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = secrets.token_hex(32)
+
+# Generate secret key
+SECRET_KEY_FILE = 'secret.key'
+if os.path.exists(SECRET_KEY_FILE):
+    with open(SECRET_KEY_FILE, 'r') as f:
+        app.config['SECRET_KEY'] = f.read().strip()
+else:
+    app.config['SECRET_KEY'] = secrets.token_hex(32)
+    with open(SECRET_KEY_FILE, 'w') as f:
+        f.write(app.config['SECRET_KEY'])
+
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['FACES_DIR'] = 'registered_faces'
-app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB
+app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024
 
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 os.makedirs(app.config['FACES_DIR'], exist_ok=True)
@@ -50,7 +60,7 @@ class AttendanceSystem:
             )
         ''')
         
-        # Persons table with user_id for data isolation
+        # Persons table with user_id
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS persons (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -78,28 +88,17 @@ class AttendanceSystem:
         conn.close()
     
     def enroll_person(self, name, image_path, user_id):
-        """Enroll person - optimized for accuracy"""
         try:
             img = cv2.imread(image_path)
             if img is None:
                 return False, "Could not read image file"
             
-            # Use best detector for accuracy
-            try:
-                face_objs = DeepFace.extract_faces(
-                    img_path=image_path,
-                    detector_backend='retinaface',
-                    enforce_detection=True,
-                    align=True
-                )
-            except:
-                # Fallback to opencv
-                face_objs = DeepFace.extract_faces(
-                    img_path=image_path,
-                    detector_backend='opencv',
-                    enforce_detection=True,
-                    align=True
-                )
+            face_objs = DeepFace.extract_faces(
+                img_path=image_path,
+                detector_backend='opencv',
+                enforce_detection=True,
+                align=False
+            )
             
             if len(face_objs) == 0:
                 return False, "No face detected in the image"
@@ -118,18 +117,15 @@ class AttendanceSystem:
                 
                 person_id = cursor.lastrowid
                 
-                # Save face in user-specific folder
                 user_faces_dir = os.path.join(self.faces_dir, f"user_{user_id}")
                 os.makedirs(user_faces_dir, exist_ok=True)
                 
                 dest_path = os.path.join(user_faces_dir, f"{person_id}.jpg")
                 
-                # Save high-quality face
                 face_img = face_objs[0]['face']
                 face_img = (face_img * 255).astype(np.uint8)
                 face_img = cv2.resize(face_img, (224, 224))
-                cv2.imwrite(dest_path, cv2.cvtColor(face_img, cv2.COLOR_RGB2BGR), 
-                           [cv2.IMWRITE_JPEG_QUALITY, 95])
+                cv2.imwrite(dest_path, cv2.cvtColor(face_img, cv2.COLOR_RGB2BGR), [cv2.IMWRITE_JPEG_QUALITY, 95])
                 
                 cursor.execute('''
                     UPDATE persons SET face_image_path = ? WHERE id = ?
@@ -154,7 +150,6 @@ class AttendanceSystem:
             gc.collect()
     
     def recognize_faces_in_image(self, image_path, user_id):
-        """Recognize faces - optimized for accuracy"""
         try:
             conn = sqlite3.connect(self.db_name)
             cursor = conn.cursor()
@@ -165,7 +160,6 @@ class AttendanceSystem:
             if not persons:
                 return [], "No enrolled persons in your organization"
             
-            # Try multiple detectors
             detected_faces = None
             backend_used = None
             backends = ['retinaface', 'mtcnn', 'opencv', 'ssd']
@@ -176,7 +170,7 @@ class AttendanceSystem:
                         img_path=image_path,
                         detector_backend=backend,
                         enforce_detection=False,
-                        align=True
+                        align=False
                     )
                     if detected_faces and len(detected_faces) > 0:
                         backend_used = backend
@@ -184,18 +178,17 @@ class AttendanceSystem:
                 except Exception as e:
                     continue
             
-            if not detected_faces or len(detected_faces) == 0:
-                return [], "No faces detected in image. Try a clearer photo with better lighting."
+            if detected_faces is None or len(detected_faces) == 0:
+                return [], "No faces detected in image"
             
             recognized_persons = []
             unrecognized_faces = 0
-            debug_info = [f"Using {backend_used} detector - Found {len(detected_faces)} face(s)\n"]
+            debug_info = [f"Detector: {backend_used} | Faces found: {len(detected_faces)}\n"]
             
-            # Process all faces
             for face_idx, detected_face in enumerate(detected_faces):
                 debug_info.append(f"--- Face {face_idx+1} ---")
                 
-                temp_face_path = f'temp_face_{face_idx}_{os.getpid()}.jpg'
+                temp_face_path = f"temp_face_{face_idx}.jpg"
                 try:
                     face_img = detected_face['face']
                     face_img = (face_img * 255).astype(np.uint8)
@@ -206,7 +199,6 @@ class AttendanceSystem:
                     best_distance = float('inf')
                     best_match_name = None
                     
-                    # Compare with enrolled persons
                     for person_id, name, face_path in persons:
                         if not os.path.exists(face_path):
                             continue
@@ -217,8 +209,7 @@ class AttendanceSystem:
                                 img2_path=face_path,
                                 model_name='Facenet512',
                                 detector_backend='skip',
-                                enforce_detection=False,
-                                distance_metric='cosine'
+                                enforce_detection=False
                             )
                             
                             distance = result['distance']
@@ -229,8 +220,8 @@ class AttendanceSystem:
                                 best_match_name = name
                                 if distance < 0.40:
                                     best_match = (person_id, name)
+                                    
                         except Exception as e:
-                            debug_info.append(f"  {name}: Error")
                             continue
                     
                     if best_match:
@@ -244,21 +235,19 @@ class AttendanceSystem:
                             debug_info.append(f"  ✗ No match")
                     
                     debug_info.append("")
+                    
                     del face_img
                     
                 finally:
                     if os.path.exists(temp_face_path):
-                        try:
-                            os.remove(temp_face_path)
-                        except:
-                            pass
+                        os.remove(temp_face_path)
                 
                 gc.collect()
             
             recognized_persons = list(set(recognized_persons))
             
             full_debug = "\n".join(debug_info)
-            full_debug += f"\n{'='*50}\nSummary: {len(detected_faces)} face(s) detected, {len(recognized_persons)} recognized, {unrecognized_faces} unrecognized"
+            full_debug += f"\n{'='*50}\nSummary: {len(detected_faces)} detected, {len(recognized_persons)} recognized, {unrecognized_faces} unrecognized"
             
             return recognized_persons, full_debug
             
@@ -370,38 +359,31 @@ class AttendanceSystem:
             if conn:
                 conn.close()
 
-# Initialize system
 system = AttendanceSystem()
 
-# Authentication decorator
 def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if 'user_id' not in session:
-            return jsonify({'success': False, 'message': 'Please log in'}), 401
+            if request.path.startswith('/api/'):
+                return jsonify({'success': False, 'message': 'Please log in'}), 401
+            return redirect('/login')
         return f(*args, **kwargs)
     return decorated_function
 
-# Routes
 @app.route('/')
 def landing():
-    if 'user_id' in session:
-        return redirect('/dashboard')
     return render_template('landing.html')
 
 @app.route('/login')
 def login_page():
-    if 'user_id' in session:
-        return redirect('/dashboard')
     return render_template('login.html')
 
 @app.route('/dashboard')
+@login_required
 def dashboard():
-    if 'user_id' not in session:
-        return redirect('/login')
     return render_template('dashboard.html')
 
-# Authentication routes
 @app.route('/api/login', methods=['POST'])
 def login():
     data = request.json
@@ -420,9 +402,10 @@ def login():
         conn.close()
         
         if user and check_password_hash(user[1], password):
+            session.clear()
             session['user_id'] = user[0]
             session['username'] = user[2]
-            session['organization'] = user[3]
+            session['organization'] = user[3] if user[3] else ''
             session.permanent = True
             return jsonify({'success': True, 'message': 'Login successful'})
         
@@ -439,7 +422,6 @@ def register():
     password = data.get('password', '')
     organization = data.get('organization', '').strip()
     
-    # Validation
     if not username or not email or not password:
         return jsonify({'success': False, 'message': 'All required fields must be filled'})
     
@@ -447,12 +429,11 @@ def register():
         return jsonify({'success': False, 'message': 'Username must be at least 3 characters'})
     
     if not is_valid_email(email):
-        return jsonify({'success': False, 'message': 'Please enter a valid email address (e.g., user@example.com)'})
+        return jsonify({'success': False, 'message': 'Please enter a valid email address'})
     
     if len(password) < 8:
         return jsonify({'success': False, 'message': 'Password must be at least 8 characters'})
     
-    # Check password strength
     if not any(c.isupper() for c in password):
         return jsonify({'success': False, 'message': 'Password must contain at least one uppercase letter'})
     
@@ -463,13 +444,11 @@ def register():
         conn = sqlite3.connect(system.db_name)
         cursor = conn.cursor()
         
-        # Check if username exists
         cursor.execute('SELECT id FROM users WHERE username = ?', (username,))
         if cursor.fetchone():
             conn.close()
             return jsonify({'success': False, 'message': 'Username already taken'})
         
-        # Check if email exists
         cursor.execute('SELECT id FROM users WHERE email = ?', (email,))
         if cursor.fetchone():
             conn.close()
@@ -486,6 +465,7 @@ def register():
         conn.commit()
         conn.close()
         
+        session.clear()
         session['user_id'] = user_id
         session['username'] = username
         session['organization'] = organization
@@ -506,10 +486,9 @@ def logout():
 def get_user():
     return jsonify({
         'username': session.get('username'),
-        'organization': session.get('organization')
+        'organization': session.get('organization', '')
     })
 
-# Attendance routes
 @app.route('/api/enroll', methods=['POST'])
 @login_required
 def enroll():
@@ -553,18 +532,14 @@ def mark_attendance():
         if not image_data:
             return jsonify({'success': False, 'message': 'Image required'})
         
-        try:
-            image_data = image_data.split(',')[1]
-            image_bytes = base64.b64decode(image_data)
-        except Exception as e:
-            return jsonify({'success': False, 'message': 'Invalid image data'})
+        image_data = image_data.split(',')[1]
+        image_bytes = base64.b64decode(image_data)
         
         temp_path = os.path.join(app.config['UPLOAD_FOLDER'], f'temp_attendance_{os.getpid()}.jpg')
         with open(temp_path, 'wb') as f:
             f.write(image_bytes)
         
         user_id = session.get('user_id')
-        
         recognized_persons, debug_info = system.recognize_faces_in_image(temp_path, user_id)
         
         if not recognized_persons:
@@ -585,11 +560,7 @@ def mark_attendance():
         })
         
     except Exception as e:
-        return jsonify({
-            'success': False, 
-            'message': 'Server error',
-            'debug': f'Error: {str(e)}'
-        })
+        return jsonify({'success': False, 'message': str(e), 'debug': f'Error: {str(e)}'})
     finally:
         if temp_path and os.path.exists(temp_path):
             try:
@@ -648,15 +619,9 @@ def export_csv():
 
 if __name__ == '__main__':
     print("=" * 60)
-    print("🎭 AI Attendance Tracker - Multi-User Version")
+    print("🎭 AI Attendance Tracker")
     print("=" * 60)
-    print("✓ Full authentication system")
-    print("✓ Multi-organization support")
-    print("✓ Email validation")
-    print("✓ Password strength requirements")
-    print("✓ Data isolation per user")
-    print("=" * 60)
-    print("\n🌐 Opening at: http://localhost:5000")
+    print("🌐 Server starting at: http://localhost:5000")
     print("📝 Press CTRL+C to stop\n")
     
     app.run(debug=True, host='localhost', port=5000)
