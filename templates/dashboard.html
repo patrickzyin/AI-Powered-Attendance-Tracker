@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard - AI Attendance Tracker</title>
+    <title>Face Recognition Attendance System</title>
     <style>
         * {
             margin: 0;
@@ -30,62 +30,25 @@
             color: var(--text-dark);
         }
         
-        /* Navbar */
-        nav {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 20px 40px;
+        header {
             background: var(--bg-color);
             box-shadow: 5px 5px 15px var(--shadow-dark), 
                         -5px -5px 15px var(--shadow-light);
-            position: sticky;
-            top: 0;
-            z-index: 100;
+            padding: 30px;
+            text-align: center;
         }
         
-        .logo {
-            font-size: 24px;
-            font-weight: 700;
+        h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
             background: linear-gradient(135deg, var(--primary), var(--secondary));
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
         }
         
-        .user-info {
-            display: flex;
-            align-items: center;
-            gap: 20px;
-        }
-        
-        .user-name {
-            font-weight: 600;
-            color: var(--text-dark);
-        }
-        
-        .neu-btn {
-            padding: 10px 25px;
-            border: none;
-            border-radius: 50px;
-            background: var(--bg-color);
-            box-shadow: 5px 5px 10px var(--shadow-dark), 
-                        -5px -5px 10px var(--shadow-light);
-            cursor: pointer;
-            font-weight: 600;
-            color: var(--text-dark);
-            transition: all 0.3s;
-            font-size: 14px;
-        }
-        
-        .neu-btn:hover {
-            box-shadow: 2px 2px 5px var(--shadow-dark), 
-                        -2px -2px 5px var(--shadow-light);
-        }
-        
-        .neu-btn.primary {
-            background: linear-gradient(135deg, var(--primary), var(--secondary));
-            color: white;
-            box-shadow: 5px 5px 10px rgba(102, 126, 234, 0.3);
+        .subtitle {
+            color: var(--text-light);
+            font-size: 1.1em;
         }
         
         .container {
@@ -94,7 +57,6 @@
             padding: 30px;
         }
         
-        /* Tabs */
         .tabs {
             display: flex;
             gap: 15px;
@@ -115,6 +77,9 @@
             color: var(--text-light);
             border-radius: 15px;
             transition: all 0.3s;
+            border: none;
+            background: transparent;
+            font-size: 16px;
         }
         
         .tab.active {
@@ -137,7 +102,6 @@
             to { opacity: 1; transform: translateY(0); }
         }
         
-        /* Cards */
         .neu-card {
             background: var(--bg-color);
             border-radius: 20px;
@@ -155,9 +119,8 @@
             -webkit-text-fill-color: transparent;
         }
         
-        /* Form Elements */
         .form-group {
-            margin-bottom: 20px;
+            margin-bottom: 25px;
         }
         
         label {
@@ -188,6 +151,7 @@
             display: flex;
             gap: 15px;
             margin: 20px 0;
+            flex-wrap: wrap;
         }
         
         .neu-btn-large {
@@ -215,8 +179,15 @@
                         -6px -6px 12px var(--shadow-light);
         }
         
-        /* Video/Preview */
+        .neu-btn-danger {
+            background: linear-gradient(135deg, var(--error), #c0392b);
+            color: white;
+            padding: 8px 20px;
+            box-shadow: 4px 4px 8px rgba(231, 76, 60, 0.3);
+        }
+        
         .video-container {
+            position: relative;
             margin: 20px 0;
             text-align: center;
             display: none;
@@ -229,15 +200,17 @@
             box-shadow: 10px 10px 30px var(--shadow-dark);
         }
         
-        .preview-img {
-            max-width: 100%;
-            max-height: 400px;
-            border-radius: 15px;
-            box-shadow: 10px 10px 30px var(--shadow-dark);
+        .preview-container {
             margin: 20px 0;
+            text-align: center;
         }
         
-        /* Status Box */
+        .preview-img {
+            max-width: 300px;
+            border-radius: 15px;
+            box-shadow: 10px 10px 30px var(--shadow-dark);
+        }
+        
         .status-box {
             background: var(--bg-color);
             border-radius: 15px;
@@ -257,7 +230,6 @@
         .error { color: var(--error); font-weight: 600; }
         .warning { color: var(--warning); font-weight: 600; }
         
-        /* Table */
         table {
             width: 100%;
             border-collapse: collapse;
@@ -270,16 +242,10 @@
             background: linear-gradient(135deg, var(--primary), var(--secondary));
             color: white;
             font-weight: 600;
-            border-radius: 10px 10px 0 0;
         }
         
-        th:first-child {
-            border-radius: 10px 0 0 0;
-        }
-        
-        th:last-child {
-            border-radius: 0 10px 0 0;
-        }
+        th:first-child { border-radius: 10px 0 0 0; }
+        th:last-child { border-radius: 0 10px 0 0; }
         
         td {
             padding: 15px;
@@ -298,7 +264,6 @@
             overflow: hidden;
         }
         
-        /* Loading */
         .loading {
             display: none;
             text-align: center;
@@ -342,31 +307,29 @@
         canvas { display: none; }
         
         @media (max-width: 768px) {
-            .tabs {
-                flex-direction: column;
-            }
-            
-            .button-group {
-                flex-direction: column;
-            }
+            .tabs { flex-direction: column; }
+            .button-group { flex-direction: column; }
+            h1 { font-size: 2em; }
         }
     </style>
 </head>
 <body>
-    <nav>
-        <div class="logo">🎭 AI Attendance Tracker</div>
-        <div class="user-info">
-            <span class="user-name" id="username">Loading...</span>
-            <button class="neu-btn" onclick="logout()">Logout</button>
+    <header>
+        <h1>🎭 Face Recognition Attendance</h1>
+        <p class="subtitle">Smart attendance tracking with AI-powered face recognition</p>
+        <div id="userBar" style="margin-top:15px; display:flex; justify-content:center; gap:20px; font-weight:600;">
+            <span id="userLabel"></span>
+            <button class="neu-btn-large neu-btn-secondary" onclick="logout()">Logout</button>
         </div>
-    </nav>
+
+    </header>
     
     <div class="container">
         <div class="tabs">
-            <div class="tab active" onclick="showTab('enroll')">📝 Register</div>
-            <div class="tab" onclick="showTab('attendance')">✅ Attendance</div>
-            <div class="tab" onclick="showTab('reports')">📊 Reports</div>
-            <div class="tab" onclick="showTab('people')">👥 People</div>
+            <button class="tab active" onclick="showTab('enroll')">📝 Register</button>
+            <button class="tab" onclick="showTab('attendance')">✅ Attendance</button>
+            <button class="tab" onclick="showTab('reports')">📊 Reports</button>
+            <button class="tab" onclick="showTab('people')">👥 People</button>
         </div>
         
         <!-- Register Tab -->
@@ -387,19 +350,19 @@
                 
                 <div class="video-container" id="enrollVideoContainer">
                     <video id="video" autoplay></video>
-                    <div class="button-group" style="margin-top: 15px;">
+                    <div class="button-group" style="margin-top: 15px; justify-content: center;">
                         <button class="neu-btn-large" onclick="captureEnrollPhoto()">📸 Capture</button>
                         <button class="neu-btn-large neu-btn-secondary" onclick="stopEnrollCamera()">❌ Cancel</button>
                     </div>
                 </div>
                 
-                <div id="enrollPreview"></div>
+                <div class="preview-container" id="enrollPreview"></div>
                 
                 <button class="neu-btn-large" onclick="enrollPerson()" style="width: 100%; margin-top: 20px;">✓ Register Person</button>
                 
                 <div class="loading" id="enrollLoading">
                     <div class="spinner"></div>
-                    <p>Processing...</p>
+                    <p>Processing with AI face detection...</p>
                 </div>
                 
                 <div id="enrollStatus"></div>
@@ -419,17 +382,17 @@
                 
                 <div class="video-container" id="attendanceVideoContainer">
                     <video id="attendanceVideo" autoplay></video>
-                    <div class="button-group" style="margin-top: 15px;">
+                    <div class="button-group" style="margin-top: 15px; justify-content: center;">
                         <button class="neu-btn-large" onclick="captureAttendancePhoto()">📸 Capture & Recognize</button>
                         <button class="neu-btn-large neu-btn-secondary" onclick="stopAttendanceCamera()">❌ Cancel</button>
                     </div>
                 </div>
                 
-                <div id="attendancePreview"></div>
+                <div class="preview-container" id="attendancePreview"></div>
                 
                 <div class="loading" id="attendanceLoading">
                     <div class="spinner"></div>
-                    <p>Recognizing faces... This may take 10-15 seconds</p>
+                    <p>Recognizing faces... This may take 15-30 seconds</p>
                 </div>
                 
                 <div class="status-box" id="attendanceStatus"></div>
@@ -441,12 +404,12 @@
             <div class="neu-card">
                 <h2 class="card-title">Attendance Reports</h2>
                 
-                <div style="display: flex; gap: 15px; margin-bottom: 20px;">
-                    <div class="form-group" style="flex: 1;">
+                <div style="display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 20px;">
+                    <div class="form-group" style="flex: 1; min-width: 200px;">
                         <label>Start Date</label>
                         <input type="date" id="startDate">
                     </div>
-                    <div class="form-group" style="flex: 1;">
+                    <div class="form-group" style="flex: 1; min-width: 200px;">
                         <label>End Date</label>
                         <input type="date" id="endDate">
                     </div>
@@ -507,31 +470,31 @@
         let attendanceStream = null;
         let enrollCapturedImage = null;
         let attendanceCapturedImage = null;
-        
-        // Load user info
-        async function loadUserInfo() {
-            try {
-                const response = await fetch('/api/user');
-                if (response.status === 401) {
-                    window.location.href = '/login';
-                    return;
-                }
-                const data = await response.json();
-                document.getElementById('username').textContent = data.username || 'User';
-            } catch (err) {
-                console.error('Failed to load user info');
-            }
+
+            async function authFetch(url, options = {}) {
+    const r = await fetch(url, options);
+    if (r.status === 401) {
+        window.location.href = "/login";
+        return null;
+    }
+    return r;
+}
+
+        async function loadUser() {
+            const r = await authFetch("/api/user");
+            if (!r) return;
+            const d = await r.json();
+            document.getElementById("userLabel").textContent =
+                d.organization ? `${d.username} (${d.organization})` : d.username;
         }
-        
+
         async function logout() {
-            try {
-                await fetch('/api/logout', { method: 'POST' });
-                window.location.href = '/';
-            } catch (err) {
-                console.error('Logout failed');
-            }
+            await fetch("/api/logout", { method: "POST" });
+            window.location.href = "/";
         }
+
         
+        // Tab switching
         function showTab(tabName) {
             document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
             document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
@@ -539,6 +502,7 @@
             event.target.classList.add('active');
             document.getElementById(tabName).classList.add('active');
             
+            // Load data when switching to certain tabs
             if (tabName === 'reports') showAllReports();
             if (tabName === 'people') loadPeople();
         }
@@ -567,6 +531,7 @@
             const video = document.getElementById('video');
             const canvas = document.getElementById('canvas');
             
+            // Resize to max 1200px width for better quality
             const maxWidth = 1200;
             const scale = Math.min(1, maxWidth / video.videoWidth);
             canvas.width = video.videoWidth * scale;
@@ -575,6 +540,7 @@
             const ctx = canvas.getContext('2d');
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
             
+            // Higher quality compression
             enrollCapturedImage = canvas.toDataURL('image/jpeg', 0.85);
             
             document.getElementById('enrollPreview').innerHTML = 
@@ -585,43 +551,47 @@
         
         function handleFileUpload(input, type) {
             const file = input.files[0];
-            if (!file) return;
-            
-            if (file.size > 20 * 1024 * 1024) {
-                alert('File too large. Please use an image under 20MB');
-                return;
-            }
-            
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                const img = new Image();
-                img.onload = function() {
-                    const canvas = document.getElementById('canvas');
-                    
-                    const maxWidth = 1600;
-                    const scale = Math.min(1, maxWidth / img.width);
-                    canvas.width = img.width * scale;
-                    canvas.height = img.height * scale;
-                    
-                    const ctx = canvas.getContext('2d');
-                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                    
-                    const compressedImage = canvas.toDataURL('image/jpeg', 0.85);
-                    
-                    if (type === 'enroll') {
-                        enrollCapturedImage = compressedImage;
-                        document.getElementById('enrollPreview').innerHTML = 
-                            `<img src="${compressedImage}" class="preview-img" alt="Uploaded">`;
-                    } else {
-                        attendanceCapturedImage = compressedImage;
-                        document.getElementById('attendancePreview').innerHTML = 
-                            `<img src="${compressedImage}" class="preview-img" alt="Uploaded">`;
-                        markAttendance();
-                    }
+            if (file) {
+                // Allow up to 20MB before compression
+                if (file.size > 20 * 1024 * 1024) {
+                    alert('File too large. Please use an image under 20MB');
+                    return;
+                }
+                
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    // Compress the uploaded image
+                    const img = new Image();
+                    img.onload = function() {
+                        const canvas = document.getElementById('canvas');
+                        
+                        // Resize to max 1600px width (higher quality for group photos)
+                        const maxWidth = 1600;
+                        const scale = Math.min(1, maxWidth / img.width);
+                        canvas.width = img.width * scale;
+                        canvas.height = img.height * scale;
+                        
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                        
+                        // Higher quality compression (0.85 instead of 0.7)
+                        const compressedImage = canvas.toDataURL('image/jpeg', 0.85);
+                        
+                        if (type === 'enroll') {
+                            enrollCapturedImage = compressedImage;
+                            document.getElementById('enrollPreview').innerHTML = 
+                                `<img src="${compressedImage}" class="preview-img" alt="Uploaded">`;
+                        } else {
+                            attendanceCapturedImage = compressedImage;
+                            document.getElementById('attendancePreview').innerHTML = 
+                                `<img src="${compressedImage}" class="preview-img" alt="Uploaded">`;
+                            markAttendance();
+                        }
+                    };
+                    img.src = e.target.result;
                 };
-                img.src = e.target.result;
-            };
-            reader.readAsDataURL(file);
+                reader.readAsDataURL(file);
+            }
         }
         
         async function enrollPerson() {
@@ -645,7 +615,7 @@
                 formData.append('name', name);
                 formData.append('image', enrollCapturedImage);
                 
-                const response = await fetch('/api/enroll', {
+                const response = await authFetch('/api/enroll', {
                     method: 'POST',
                     body: formData
                 });
@@ -660,6 +630,7 @@
                     document.getElementById('personName').value = '';
                     document.getElementById('enrollPreview').innerHTML = '';
                     enrollCapturedImage = null;
+                    loadPeople();
                 } else {
                     document.getElementById('enrollStatus').innerHTML = 
                         `<div class="alert alert-error">✗ ${data.message}</div>`;
@@ -696,6 +667,7 @@
             const video = document.getElementById('attendanceVideo');
             const canvas = document.getElementById('canvas');
             
+            // Resize to max 1600px width for group photos
             const maxWidth = 1600;
             const scale = Math.min(1, maxWidth / video.videoWidth);
             canvas.width = video.videoWidth * scale;
@@ -704,6 +676,7 @@
             const ctx = canvas.getContext('2d');
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
             
+            // Higher quality for group photos
             attendanceCapturedImage = canvas.toDataURL('image/jpeg', 0.85);
             
             stopAttendanceCamera();
@@ -716,7 +689,6 @@
                 return;
             }
             
-            console.log('Starting attendance marking...');
             document.getElementById('attendanceLoading').style.display = 'block';
             document.getElementById('attendanceStatus').innerHTML = '';
             document.getElementById('attendancePreview').innerHTML = '';
@@ -725,39 +697,17 @@
                 const formData = new FormData();
                 formData.append('image', attendanceCapturedImage);
                 
-                console.log('Sending request to server...');
-                
-                const response = await fetch('/api/mark-attendance', {
+                const response = await authFetch('/api/mark-attendance', {
                     method: 'POST',
                     body: formData
                 });
                 
-                console.log('Response status:', response.status);
-                
-                // Check if response is ok
-                if (!response.ok) {
-                    throw new Error(`Server returned ${response.status}: ${response.statusText}`);
-                }
-                
-                // Get response text first to debug
-                const responseText = await response.text();
-                console.log('Response text:', responseText);
-                
-                // Try to parse as JSON
-                let data;
-                try {
-                    data = JSON.parse(responseText);
-                } catch (parseError) {
-                    console.error('JSON parse error:', parseError);
-                    throw new Error('Server returned invalid response. Please check server logs.');
-                }
-                
-                console.log('Parsed data:', data);
+                const data = await response.json();
                 
                 document.getElementById('attendanceLoading').style.display = 'none';
                 
                 let statusHTML = '<strong>=== DETECTION & RECOGNITION DETAILS ===</strong>\n\n';
-                statusHTML += (data.debug || 'No debug info available') + '\n\n';
+                statusHTML += (data.debug || 'Processing...') + '\n\n';
                 statusHTML += '=' + '='.repeat(49) + '\n\n';
                 
                 if (data.success) {
@@ -783,31 +733,22 @@
                         });
                     }
                 } else {
-                    statusHTML += `<span class="error">❌ ${data.message || 'Unknown error'}</span>`;
+                    statusHTML += `<span class="error">❌ ${data.message || 'No recognized faces'}</span>`;
                 }
                 
                 document.getElementById('attendanceStatus').innerHTML = statusHTML;
                 attendanceCapturedImage = null;
                 
             } catch (err) {
-                console.error('Error details:', err);
                 document.getElementById('attendanceLoading').style.display = 'none';
                 
-                let errorMsg = 'Failed to process attendance. ';
-                
-                if (err.message.includes('JSON')) {
-                    errorMsg += 'Server error - please check if the server is running and try again.';
-                } else if (err.message.includes('413') || err.message.includes('Entity Too Large')) {
-                    errorMsg += 'Image too large. Please use a smaller photo.';
-                } else if (err.message.includes('401')) {
-                    errorMsg += 'Session expired. Please log in again.';
-                    setTimeout(() => window.location.href = '/login', 2000);
-                } else {
-                    errorMsg += err.message;
+                let errorMsg = err.message;
+                if (errorMsg.includes('413') || errorMsg.includes('Entity Too Large')) {
+                    errorMsg = 'Image too large. Please use a smaller photo or lower resolution camera.';
                 }
                 
                 document.getElementById('attendanceStatus').innerHTML = 
-                    `<span class="error">Error: ${errorMsg}</span>\n\nPlease try again or contact support if the issue persists.`;
+                    `<span class="error">Error: ${errorMsg}</span>`;
             }
         }
         
@@ -821,23 +762,30 @@
                 return;
             }
             
-            const response = await fetch(`/api/attendance?start_date=${startDate}&end_date=${endDate}`);
-            const data = await response.json();
-            
-            displayReports(data.records);
+            try {
+                const response = await authFetch(`/api/attendance?start_date=${startDate}&end_date=${endDate}`);
+                const data = await response.json();
+                displayReports(data.records);
+            } catch (err) {
+                console.error('Error loading reports:', err);
+            }
         }
         
         async function showAllReports() {
-            const response = await fetch('/api/attendance');
-            const data = await response.json();
-            displayReports(data.records);
+            try {
+                const response = await authFetch('/api/attendance');
+                const data = await response.json();
+                displayReports(data.records);
+            } catch (err) {
+                console.error('Error loading reports:', err);
+            }
         }
         
         function displayReports(records) {
             const tbody = document.getElementById('reportsBody');
             tbody.innerHTML = '';
             
-            if (records.length === 0) {
+            if (!records || records.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;">No records found</td></tr>';
                 return;
             }
@@ -866,27 +814,31 @@
         
         // People functions
         async function loadPeople() {
-            const response = await fetch('/api/persons');
-            const data = await response.json();
-            
-            const tbody = document.getElementById('peopleBody');
-            tbody.innerHTML = '';
-            
-            if (data.persons.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;">No registered people</td></tr>';
-                return;
+            try {
+                const response = await authFetch('/api/persons');
+                const data = await response.json();
+                
+                const tbody = document.getElementById('peopleBody');
+                tbody.innerHTML = '';
+                
+                if (!data.persons || data.persons.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;">No registered people</td></tr>';
+                    return;
+                }
+                
+                data.persons.forEach(person => {
+                    const row = `<tr>
+                        <td>${person.name}</td>
+                        <td>${person.date}</td>
+                        <td>
+                            <button class="neu-btn-large neu-btn-danger" onclick="deletePerson('${person.name}')">🗑️ Delete</button>
+                        </td>
+                    </tr>`;
+                    tbody.innerHTML += row;
+                });
+            } catch (err) {
+                console.error('Error loading people:', err);
             }
-            
-            data.persons.forEach(person => {
-                const row = `<tr>
-                    <td>${person.name}</td>
-                    <td>${person.date}</td>
-                    <td>
-                        <button class="neu-btn" onclick="deletePerson('${person.name}')" style="padding: 8px 20px;">🗑️ Delete</button>
-                    </td>
-                </tr>`;
-                tbody.innerHTML += row;
-            });
         }
         
         async function deletePerson(name) {
@@ -894,27 +846,31 @@
                 return;
             }
             
-            const response = await fetch('/api/delete-person', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ name: name })
-            });
-            
-            const data = await response.json();
-            
-            if (data.success) {
-                alert(data.message);
-                loadPeople();
-            } else {
-                alert('Error: ' + data.message);
+            try {
+                const response = await authFetch('/api/delete-person', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ name: name })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    alert(data.message);
+                    loadPeople();
+                } else {
+                    alert('Error: ' + data.message);
+                }
+            } catch (err) {
+                console.error('Delete error:', err);
+                alert('Failed to delete person');
             }
         }
         
         // Load initial data
         window.onload = function() {
-            loadUserInfo();
             showAllReports();
             loadPeople();
         };
