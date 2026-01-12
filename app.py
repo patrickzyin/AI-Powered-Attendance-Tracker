@@ -264,32 +264,40 @@ class AttendanceSystem:
         current_time = datetime.now().strftime("%H:%M:%S")
         
         marked = []
-        already_marked = []
+        updated = []
         
         for person_id in person_ids:
-            cursor.execute('''
-                SELECT COUNT(*) FROM attendance 
-                WHERE person_id = ? AND date = ?
-            ''', (person_id, today))
-            
-            count = cursor.fetchone()[0]
-            
             cursor.execute('SELECT name FROM persons WHERE id = ?', (person_id,))
             name = cursor.fetchone()[0]
             
-            if count == 0:
+            # Check if attendance already exists for today
+            cursor.execute('''
+                SELECT id FROM attendance 
+                WHERE person_id = ? AND date = ?
+            ''', (person_id, today))
+            
+            existing = cursor.fetchone()
+            
+            if existing:
+                # UPDATE existing attendance with new time
+                cursor.execute('''
+                    UPDATE attendance 
+                    SET time = ? 
+                    WHERE id = ?
+                ''', (current_time, existing[0]))
+                updated.append(name)
+            else:
+                # INSERT new attendance
                 cursor.execute('''
                     INSERT INTO attendance (person_id, date, time)
                     VALUES (?, ?, ?)
                 ''', (person_id, today, current_time))
                 marked.append(name)
-            else:
-                already_marked.append(name)
         
         conn.commit()
         conn.close()
         
-        return marked, already_marked
+        return marked, updated
     
     def get_attendance_report(self, start_date=None, end_date=None, user_id=None):
         conn = sqlite3.connect(self.db_name)
@@ -549,13 +557,13 @@ def mark_attendance():
                 'debug': debug_info
             })
         
-        marked, already_marked = system.mark_attendance([p[0] for p in recognized_persons])
+        marked, updated = system.mark_attendance([p[0] for p in recognized_persons])
         
         return jsonify({
             'success': True,
             'recognized': [name for _, name in recognized_persons],
             'marked': marked,
-            'already_marked': already_marked,
+            'updated': updated,
             'debug': debug_info
         })
         
@@ -600,22 +608,32 @@ def delete_person():
 @app.route('/api/export-csv')
 @login_required
 def export_csv():
-    start_date = request.args.get('start_date')
-    end_date = request.args.get('end_date')
-    user_id = session.get('user_id')
-    
-    df = system.get_attendance_report(start_date, end_date, user_id)
-    
-    output = BytesIO()
-    df.to_csv(output, index=False)
-    output.seek(0)
-    
-    return send_file(
-        output,
-        mimetype='text/csv',
-        as_attachment=True,
-        download_name=f'attendance_report_{date.today()}.csv'
-    )
+    try:
+        start_date = request.args.get('start_date')
+        end_date = request.args.get('end_date')
+        user_id = session.get('user_id')
+        
+        df = system.get_attendance_report(start_date, end_date, user_id)
+        
+        # Check if dataframe is empty
+        if df.empty:
+            # Return empty CSV with headers
+            output = BytesIO()
+            output.write(b'name,date,time\n')
+            output.seek(0)
+        else:
+            output = BytesIO()
+            df.to_csv(output, index=False, encoding='utf-8')
+            output.seek(0)
+        
+        return send_file(
+            output,
+            mimetype='text/csv',
+            as_attachment=True,
+            download_name=f'attendance_report_{date.today()}.csv'
+        )
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'Export failed: {str(e)}'}), 500
 
 if __name__ == '__main__':
     print("=" * 60)

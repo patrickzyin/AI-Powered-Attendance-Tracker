@@ -34,13 +34,18 @@
             background: var(--bg-color);
             box-shadow: 5px 5px 15px var(--shadow-dark), 
                         -5px -5px 15px var(--shadow-light);
-            padding: 30px;
-            text-align: center;
+            padding: 20px 40px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
         }
         
-        h1 {
-            font-size: 2.5em;
-            margin-bottom: 10px;
+        .header-left h1 {
+            font-size: 2em;
+            margin-bottom: 5px;
             background: linear-gradient(135deg, var(--primary), var(--secondary));
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
@@ -48,7 +53,47 @@
         
         .subtitle {
             color: var(--text-light);
-            font-size: 1.1em;
+            font-size: 0.95em;
+        }
+        
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+        
+        .user-info {
+            text-align: right;
+        }
+        
+        .username {
+            font-weight: 600;
+            color: var(--text-dark);
+            font-size: 16px;
+        }
+        
+        .organization {
+            font-size: 13px;
+            color: var(--text-light);
+        }
+        
+        .neu-btn {
+            padding: 10px 25px;
+            border: none;
+            border-radius: 50px;
+            background: var(--bg-color);
+            box-shadow: 5px 5px 10px var(--shadow-dark), 
+                        -5px -5px 10px var(--shadow-light);
+            cursor: pointer;
+            font-weight: 600;
+            color: var(--text-dark);
+            transition: all 0.3s;
+            font-size: 14px;
+        }
+        
+        .neu-btn:hover {
+            box-shadow: 2px 2px 5px var(--shadow-dark), 
+                        -2px -2px 5px var(--shadow-light);
         }
         
         .container {
@@ -214,16 +259,87 @@
         .status-box {
             background: var(--bg-color);
             border-radius: 15px;
-            padding: 20px;
+            padding: 25px;
             margin: 20px 0;
             box-shadow: inset 4px 4px 8px var(--shadow-dark), 
                         inset -4px -4px 8px var(--shadow-light);
+            font-size: 15px;
+            line-height: 1.8;
+        }
+        
+        .attendance-summary {
+            margin-bottom: 20px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid rgba(102, 126, 234, 0.2);
+        }
+        
+        .summary-title {
+            font-size: 20px;
+            font-weight: 700;
+            margin-bottom: 15px;
+            color: var(--text-dark);
+        }
+        
+        .person-list {
+            margin: 10px 0;
+        }
+        
+        .person-item {
+            padding: 10px 15px;
+            margin: 8px 0;
+            background: var(--bg-color);
+            border-radius: 10px;
+            box-shadow: 3px 3px 8px var(--shadow-dark), 
+                        -3px -3px 8px var(--shadow-light);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .person-icon {
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+        }
+        
+        .person-name {
+            font-weight: 600;
+            color: var(--text-dark);
+        }
+        
+        .debug-toggle {
+            margin-top: 15px;
+            padding: 10px;
+            text-align: center;
+            cursor: pointer;
+            color: var(--text-light);
+            font-size: 13px;
+            transition: color 0.3s;
+        }
+        
+        .debug-toggle:hover {
+            color: var(--primary);
+        }
+        
+        .debug-details {
+            display: none;
+            margin-top: 15px;
+            padding: 15px;
+            background: rgba(0, 0, 0, 0.02);
+            border-radius: 10px;
             font-family: 'Courier New', monospace;
-            font-size: 14px;
+            font-size: 13px;
             white-space: pre-wrap;
-            max-height: 400px;
+            max-height: 300px;
             overflow-y: auto;
             line-height: 1.6;
+        }
+        
+        .debug-details.show {
+            display: block;
         }
         
         .success { color: var(--success); font-weight: 600; }
@@ -307,21 +423,35 @@
         canvas { display: none; }
         
         @media (max-width: 768px) {
+            header {
+                flex-direction: column;
+                gap: 15px;
+                text-align: center;
+            }
+            
+            .header-right {
+                flex-direction: column;
+            }
+            
             .tabs { flex-direction: column; }
             .button-group { flex-direction: column; }
-            h1 { font-size: 2em; }
+            h1 { font-size: 1.5em; }
         }
     </style>
 </head>
 <body>
     <header>
-        <h1>🎭 Face Recognition Attendance</h1>
-        <p class="subtitle">Smart attendance tracking with AI-powered face recognition</p>
-        <div id="userBar" style="margin-top:15px; display:flex; justify-content:center; gap:20px; font-weight:600;">
-            <span id="userLabel"></span>
-            <button class="neu-btn-large neu-btn-secondary" onclick="logout()">Logout</button>
+        <div class="header-left">
+            <h1>🎭 Face Recognition Attendance</h1>
+            <p class="subtitle">Smart attendance tracking with AI-powered face recognition</p>
         </div>
-
+        <div class="header-right">
+            <div class="user-info">
+                <div class="username" id="username">Loading...</div>
+                <div class="organization" id="organization"></div>
+            </div>
+            <button class="neu-btn" onclick="logout()">Logout</button>
+        </div>
     </header>
     
     <div class="container">
@@ -471,21 +601,23 @@
         let enrollCapturedImage = null;
         let attendanceCapturedImage = null;
 
-            async function authFetch(url, options = {}) {
-    const r = await fetch(url, options);
-    if (r.status === 401) {
-        window.location.href = "/login";
-        return null;
-    }
-    return r;
-}
+        async function authFetch(url, options = {}) {
+            const r = await fetch(url, options);
+            if (r.status === 401) {
+                window.location.href = "/login";
+                return null;
+            }
+            return r;
+        }
 
         async function loadUser() {
             const r = await authFetch("/api/user");
             if (!r) return;
             const d = await r.json();
-            document.getElementById("userLabel").textContent =
-                d.organization ? `${d.username} (${d.organization})` : d.username;
+            document.getElementById("username").textContent = d.username;
+            if (d.organization) {
+                document.getElementById("organization").textContent = d.organization;
+            }
         }
 
         async function logout() {
@@ -620,6 +752,8 @@
                     body: formData
                 });
                 
+                if (!response) return;
+                
                 const data = await response.json();
                 
                 document.getElementById('enrollLoading').style.display = 'none';
@@ -683,6 +817,11 @@
             markAttendance();
         }
         
+        function toggleDebug() {
+            const debug = document.getElementById('debugDetails');
+            debug.classList.toggle('show');
+        }
+        
         async function markAttendance() {
             if (!attendanceCapturedImage) {
                 alert('Please capture or upload a photo');
@@ -691,7 +830,7 @@
             
             document.getElementById('attendanceLoading').style.display = 'block';
             document.getElementById('attendanceStatus').innerHTML = '';
-            document.getElementById('attendancePreview').innerHTML = '';
+            // Keep the preview visible
             
             try {
                 const formData = new FormData();
@@ -702,42 +841,66 @@
                     body: formData
                 });
                 
+                if (!response) return;
+                
                 const data = await response.json();
                 
                 document.getElementById('attendanceLoading').style.display = 'none';
                 
-                let statusHTML = '<strong>=== DETECTION & RECOGNITION DETAILS ===</strong>\n\n';
-                statusHTML += (data.debug || 'Processing...') + '\n\n';
-                statusHTML += '=' + '='.repeat(49) + '\n\n';
+                let statusHTML = '';
                 
                 if (data.success) {
-                    statusHTML += '<span class="success">✅ RECOGNITION COMPLETE</span>\n\n';
-                    statusHTML += `Recognized ${data.recognized.length} person(s):\n`;
-                    data.recognized.forEach(name => {
-                        statusHTML += `  • ${name}\n`;
-                    });
-                    statusHTML += '\n';
+                    statusHTML += '<div class="attendance-summary">';
+                    statusHTML += '<div class="summary-title">✅ Attendance Marked Successfully</div>';
                     
+                    // Show newly marked attendance
                     if (data.marked && data.marked.length > 0) {
-                        statusHTML += '<span class="success">✓ Attendance Marked:</span>\n';
+                        statusHTML += '<div style="margin: 15px 0;"><strong style="color: var(--success);">New Attendance:</strong></div>';
+                        statusHTML += '<div class="person-list">';
                         data.marked.forEach(name => {
-                            statusHTML += `  • ${name}\n`;
+                            statusHTML += `<div class="person-item">
+                                <span class="person-icon">✓</span>
+                                <span class="person-name">${name}</span>
+                                <span style="margin-left: auto; color: var(--success); font-size: 14px;">Marked</span>
+                            </div>`;
                         });
-                        statusHTML += '\n';
+                        statusHTML += '</div>';
                     }
                     
-                    if (data.already_marked && data.already_marked.length > 0) {
-                        statusHTML += '<span class="warning">⚠ Already marked today:</span>\n';
-                        data.already_marked.forEach(name => {
-                            statusHTML += `  • ${name}\n`;
+                    // Show updated attendance (replaced duplicates)
+                    if (data.updated && data.updated.length > 0) {
+                        statusHTML += '<div style="margin: 15px 0;"><strong style="color: var(--primary);">Updated Attendance:</strong></div>';
+                        statusHTML += '<div class="person-list">';
+                        data.updated.forEach(name => {
+                            statusHTML += `<div class="person-item">
+                                <span class="person-icon">🔄</span>
+                                <span class="person-name">${name}</span>
+                                <span style="margin-left: auto; color: var(--primary); font-size: 14px;">Time Updated</span>
+                            </div>`;
                         });
+                        statusHTML += '</div>';
                     }
+                    
+                    statusHTML += '</div>';
+                    
+                    // Add debug toggle
+                    statusHTML += '<div class="debug-toggle" onclick="toggleDebug()">📊 Show Technical Details</div>';
+                    statusHTML += `<div class="debug-details" id="debugDetails">${data.debug || 'No debug info'}</div>`;
                 } else {
-                    statusHTML += `<span class="error">❌ ${data.message || 'No recognized faces'}</span>`;
+                    statusHTML += '<div class="attendance-summary">';
+                    statusHTML += '<div class="summary-title" style="color: var(--error);">❌ No Faces Recognized</div>';
+                    statusHTML += '<p style="margin: 15px 0; color: var(--text-light);">No registered faces were found in the image. Please try:</p>';
+                    statusHTML += '<ul style="margin-left: 20px; color: var(--text-light); line-height: 1.8;">';
+                    statusHTML += '<li>Taking a clearer photo with better lighting</li>';
+                    statusHTML += '<li>Ensuring faces are clearly visible and facing the camera</li>';
+                    statusHTML += '<li>Checking that the person is registered in the system</li>';
+                    statusHTML += '</ul>';
+                    statusHTML += '</div>';
+                    statusHTML += '<div class="debug-toggle" onclick="toggleDebug()">📊 Show Technical Details</div>';
+                    statusHTML += `<div class="debug-details" id="debugDetails">${data.debug || data.message || 'No additional info'}</div>`;
                 }
                 
                 document.getElementById('attendanceStatus').innerHTML = statusHTML;
-                attendanceCapturedImage = null;
                 
             } catch (err) {
                 document.getElementById('attendanceLoading').style.display = 'none';
@@ -748,9 +911,10 @@
                 }
                 
                 document.getElementById('attendanceStatus').innerHTML = 
-                    `<span class="error">Error: ${errorMsg}</span>`;
+                    `<div class="alert alert-error">Error: ${errorMsg}</div>`;
             }
         }
+          
         
         // Reports functions
         async function loadReports() {
@@ -764,6 +928,7 @@
             
             try {
                 const response = await authFetch(`/api/attendance?start_date=${startDate}&end_date=${endDate}`);
+                if (!response) return;
                 const data = await response.json();
                 displayReports(data.records);
             } catch (err) {
@@ -774,6 +939,7 @@
         async function showAllReports() {
             try {
                 const response = await authFetch('/api/attendance');
+                if (!response) return;
                 const data = await response.json();
                 displayReports(data.records);
             } catch (err) {
@@ -816,6 +982,7 @@
         async function loadPeople() {
             try {
                 const response = await authFetch('/api/persons');
+                if (!response) return;
                 const data = await response.json();
                 
                 const tbody = document.getElementById('peopleBody');
@@ -855,6 +1022,8 @@
                     body: JSON.stringify({ name: name })
                 });
                 
+                if (!response) return;
+                
                 const data = await response.json();
                 
                 if (data.success) {
@@ -871,6 +1040,7 @@
         
         // Load initial data
         window.onload = function() {
+            loadUser();
             showAllReports();
             loadPeople();
         };
