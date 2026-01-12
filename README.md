@@ -108,42 +108,6 @@ ai-attendance-tracker/
 └── attendance.db            # SQLite database
 ```
 
-## Technical Highlights
-
-- Multi-tenant architecture with complete data isolation
-- 4-backend face detection cascade for 95%+ reliability
-- Memory-optimized image processing pipeline
-- Parameterized SQL queries for security
-- Responsive neumorphic UI design
-
-## Security Features
-
-- Bcrypt password hashing
-- Session-based authentication with CSRF protection
-- SQL injection prevention
-- Multi-tenant data isolation via foreign keys
-- Secure file upload validation
-
-## Performance
-
-- First recognition: 10-15 seconds (model loading)
-- Subsequent recognitions: 2-5 seconds
-- Face detection success rate: 95%+
-- Recognition accuracy: 99%+ (good conditions)
-
-## Known Limitations
-
-- SQLite suitable for up to ~1000 concurrent users
-- Recognition accuracy decreases with poor lighting
-- Requires modern browser with camera access
-
-## Future Enhancements
-
-- PostgreSQL migration for production scale
-- Real-time video stream recognition
-- Mobile application
-- Advanced analytics dashboard
-- Docker containerization
 
 ## License
 
